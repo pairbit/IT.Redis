@@ -9,7 +9,7 @@
     <PackageId>IT.Redis</PackageId>
     <PackageReadmeFile>Readme.md</PackageReadmeFile>
     <PackageIcon>Icon.png</PackageIcon>
-    <Version>2.7.4-pre6</Version>
+    <Version>2.7.4.0-pre1</Version>
     <PackageTags>Async;Redis;Cache;PubSub;Messaging</PackageTags>
     <SignAssembly>true</SignAssembly>
     <PublicSign Condition=" '$(OS)' != 'Windows_NT' ">true</PublicSign>
