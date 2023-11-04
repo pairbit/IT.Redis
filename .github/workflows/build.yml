@@ -38,6 +38,6 @@ jobs:
       - name: Publish IT.Redis
         uses: pairbit/publish-nuget@v2.6.0
         with:
-            PROJECT_FILE_PATH: IT.Redis/IT.Redis.csproj
+            PROJECT_FILE_PATH: src/StackExchange.Redis/StackExchange.Redis.csproj
             NUGET_KEY: ${{secrets.NUGET}}
             TAG_COMMIT: true
