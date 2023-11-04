@@ -1,0 +1,76 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31808.319
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{3AD17044-6BFF-4750-9AC2-2CA466375F2A}"
+	ProjectSection(SolutionItems) = preProject
+		.editorconfig = .editorconfig
+		appveyor.yml = appveyor.yml
+		build.cmd = build.cmd
+		Build.csproj = Build.csproj
+		build.ps1 = build.ps1
+		.github\workflows\CI.yml = .github\workflows\CI.yml
+		Directory.Build.props = Directory.Build.props
+		Directory.Build.targets = Directory.Build.targets
+		Directory.Packages.props = Directory.Packages.props
+		global.json = global.json
+		NuGet.Config = NuGet.Config
+		README.md = README.md
+		docs\ReleaseNotes.md = docs\ReleaseNotes.md
+		Shared.ruleset = Shared.ruleset
+		version.json = version.json
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "StackExchange.Redis", "src\StackExchange.Redis\StackExchange.Redis.csproj", "{EF84877F-59BE-41BE-9013-E765AF0BB72E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{00CA0876-DA9F-44E8-B0DC-A88716BF347A}"
+	ProjectSection(SolutionItems) = preProject
+		src\Directory.Build.props = src\Directory.Build.props
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{153A10E4-E668-41AD-9E0F-6785CE7EED66}"
+	ProjectSection(SolutionItems) = preProject
+		docs\Basics.md = docs\Basics.md
+		docs\Configuration.md = docs\Configuration.md
+		docs\Events.md = docs\Events.md
+		docs\ExecSync.md = docs\ExecSync.md
+		docs\index.md = docs\index.md
+		docs\KeysScan.md = docs\KeysScan.md
+		docs\KeysValues.md = docs\KeysValues.md
+		docs\PipelinesMultiplexers.md = docs\PipelinesMultiplexers.md
+		docs\Profiling.md = docs\Profiling.md
+		docs\Profiling_v1.md = docs\Profiling_v1.md
+		docs\Profiling_v2.md = docs\Profiling_v2.md
+		docs\PubSubOrder.md = docs\PubSubOrder.md
+		docs\ReleaseNotes.md = docs\ReleaseNotes.md
+		docs\Resp3.md = docs\Resp3.md
+		docs\Scripting.md = docs\Scripting.md
+		docs\Server.md = docs\Server.md
+		docs\Testing.md = docs\Testing.md
+		docs\ThreadTheft.md = docs\ThreadTheft.md
+		docs\Timeouts.md = docs\Timeouts.md
+		docs\Transactions.md = docs\Transactions.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EF84877F-59BE-41BE-9013-E765AF0BB72E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EF84877F-59BE-41BE-9013-E765AF0BB72E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EF84877F-59BE-41BE-9013-E765AF0BB72E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EF84877F-59BE-41BE-9013-E765AF0BB72E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EF84877F-59BE-41BE-9013-E765AF0BB72E} = {00CA0876-DA9F-44E8-B0DC-A88716BF347A}
+		{153A10E4-E668-41AD-9E0F-6785CE7EED66} = {3AD17044-6BFF-4750-9AC2-2CA466375F2A}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {193AA352-6748-47C1-A5FC-C9AA6B5F000B}
+	EndGlobalSection
+EndGlobal
