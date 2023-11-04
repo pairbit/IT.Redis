@@ -7,6 +7,7 @@
     <AssemblyName>StackExchange.Redis</AssemblyName>
     <AssemblyTitle>StackExchange.Redis</AssemblyTitle>
     <PackageId>IT.Redis</PackageId>
+    <PackageReadmeFile>Readme.md</PackageReadmeFile>
     <PackageIcon>Icon.png</PackageIcon>
     <Version>2.7.4-pre2</Version>
     <PackageTags>Async;Redis;Cache;PubSub;Messaging</PackageTags>
@@ -17,6 +18,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="Readme.md" Pack="true" PackagePath="\" />
     <None Include="..\..\Icon.png" Pack="true" PackagePath="\" />
     
     <!-- needed everywhere -->
