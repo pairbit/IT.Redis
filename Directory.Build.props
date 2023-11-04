@@ -11,10 +11,7 @@
     <CodeAnalysisRuleset>$(MSBuildThisFileDirectory)Shared.ruleset</CodeAnalysisRuleset>
     <MSBuildWarningsAsMessages>NETSDK1069</MSBuildWarningsAsMessages>
     <NoWarn>NU5105;NU1507</NoWarn>
-    <PackageReleaseNotes>
-      remove Microsoft.Extensions.Logging.Abstractions
-      https://stackexchange.github.io/StackExchange.Redis/ReleaseNotes
-    </PackageReleaseNotes>
+    <PackageReleaseNotes>remove Microsoft.Extensions.Logging.Abstractions https://stackexchange.github.io/StackExchange.Redis/ReleaseNotes</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
 
     <LangVersion>11</LangVersion>
