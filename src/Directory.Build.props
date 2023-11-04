@@ -8,6 +8,5 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="all" />
-    <PackageReference Include="Nerdbank.GitVersioning" PrivateAssets="all" Condition=" '$(DEVCONTAINER)' != 'true' " />
   </ItemGroup>
 </Project>
