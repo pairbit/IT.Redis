@@ -17,6 +17,12 @@ public readonly struct RedisKey : IEquatable<RedisKey>
         KeyValue = keyValue;
     }
 
+    /// <summary>
+    /// Creates a <see cref="RedisKey"/> from a string.
+    /// </summary>
+    [Obsolete]
+    internal RedisKey(string? key) : this(null, key == null ? null : Encoding.UTF8.GetBytes(key)) { }
+
     internal RedisKey AsPrefix() => new RedisKey((byte[]?)this, null);
 
     internal bool IsNull => KeyPrefix == null && KeyValue == null;
@@ -191,6 +197,17 @@ public readonly struct RedisKey : IEquatable<RedisKey>
     internal void AssertNotNull()
     {
         if (IsNull) throw new ArgumentException("A null key is not valid in this context");
+    }
+
+    /// <summary>
+    /// Create a <see cref="RedisKey"/> from a <see cref="string"/>.
+    /// </summary>
+    /// <param name="key">The string to get a key from.</param>
+    [Obsolete]
+    public static implicit operator RedisKey(string? key)
+    {
+        if (key == null) return default;
+        return new RedisKey(null, Encoding.UTF8.GetBytes(key));
     }
 
     /// <summary>
