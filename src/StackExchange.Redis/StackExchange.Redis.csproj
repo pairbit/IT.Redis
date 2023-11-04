@@ -16,7 +16,6 @@
 
   <ItemGroup>
     <!-- needed everywhere -->
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Pipelines.Sockets.Unofficial" />
 
     <!-- built into .NET core now -->

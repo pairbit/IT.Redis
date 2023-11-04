@@ -39,7 +39,7 @@
         };
 
         /// <summary>
-        /// Whether a server type supports <see cref="ServerEndPoint.AutoConfigureAsync(PhysicalConnection?, Microsoft.Extensions.Logging.ILogger?)"/>.
+        /// Whether a server type supports <see cref="ServerEndPoint.AutoConfigureAsync(PhysicalConnection?, StackExchange.Redis.ILogger?)"/>.
         /// </summary>
         internal static bool SupportsAutoConfigure(this ServerType type) => type switch
         {

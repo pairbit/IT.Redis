@@ -9,19 +9,15 @@ internal sealed class TextWriterLogger : ILogger
     private TextWriter? _writer;
     private readonly ILogger? _wrapped;
 
-    internal static Action<string> NullWriter = _ => { };
-
     public TextWriterLogger(TextWriter writer, ILogger? wrapped)
     {
         _writer = writer;
         _wrapped = wrapped;
     }
 
-    public IDisposable BeginScope<TState>(TState state) => NothingDisposable.Instance;
-    public bool IsEnabled(LogLevel logLevel) => _writer is not null || _wrapped is not null;
-    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    public void Log(int logLevel, Exception? exception, string? message)
     {
-        _wrapped?.Log(logLevel, eventId, state, exception, formatter);
+        _wrapped?.Log(logLevel, exception, message);
         if (_writer is TextWriter writer)
         {
             lock (writer)
@@ -30,7 +26,7 @@ internal sealed class TextWriterLogger : ILogger
                 if (_writer is TextWriter innerWriter)
                 {
                     innerWriter.Write($"{DateTime.UtcNow:HH:mm:ss.ffff}: ");
-                    innerWriter.WriteLine(formatter(state, exception));
+                    innerWriter.WriteLine(GetMessage(logLevel, exception, message));
                 }
             }
         }
@@ -48,16 +44,14 @@ internal sealed class TextWriterLogger : ILogger
             }
         }
     }
+
+    public static string GetMessage(int level, Exception? exception, string? message)
+        => exception != null ? $"[{(LogLevel)level}] {message} -> {exception.Message} -> {exception.StackTrace}"
+                             : $"[{(LogLevel)level}] {message}";
 }
 
 internal static class TextWriterLoggerExtensions
 {
     internal static ILogger? With(this ILogger? logger, TextWriter? writer) =>
         writer is not null ? new TextWriterLogger(writer, logger) : logger;
-}
-
-internal sealed class NothingDisposable : IDisposable
-{
-    public static readonly NothingDisposable Instance = new NothingDisposable();
-    public void Dispose() { }
 }

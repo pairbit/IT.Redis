@@ -244,7 +244,7 @@ StackExchange.Redis.ConfigurationOptions.KeepAlive.get -> int
 StackExchange.Redis.ConfigurationOptions.KeepAlive.set -> void
 StackExchange.Redis.ConfigurationOptions.LibraryName.get -> string?
 StackExchange.Redis.ConfigurationOptions.LibraryName.set -> void
-StackExchange.Redis.ConfigurationOptions.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+StackExchange.Redis.ConfigurationOptions.LoggerFactory.get -> System.Func<System.Type!, StackExchange.Redis.ILogger!>?
 StackExchange.Redis.ConfigurationOptions.LoggerFactory.set -> void
 StackExchange.Redis.ConfigurationOptions.Password.get -> string?
 StackExchange.Redis.ConfigurationOptions.Password.set -> void
@@ -981,6 +981,8 @@ StackExchange.Redis.InternalErrorEventArgs.InternalErrorEventArgs(object! sender
 StackExchange.Redis.InternalErrorEventArgs.Origin.get -> string?
 StackExchange.Redis.IReconnectRetryPolicy
 StackExchange.Redis.IReconnectRetryPolicy.ShouldRetry(long currentRetryCount, int timeElapsedMillisecondsSinceLastRetry) -> bool
+StackExchange.Redis.ILogger
+StackExchange.Redis.ILogger.Log(int level, System.Exception? exception, string? message) -> void
 StackExchange.Redis.IRedis
 StackExchange.Redis.IRedis.Ping(StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None) -> System.TimeSpan
 StackExchange.Redis.IRedisAsync
@@ -1803,7 +1805,7 @@ virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.IncludePerforma
 virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.IsMatch(System.Net.EndPoint! endpoint) -> bool
 virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.KeepAliveInterval.get -> System.TimeSpan
 virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.LibraryName.get -> string!
-virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory?
+virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.LoggerFactory.get -> System.Func<System.Type!, StackExchange.Redis.ILogger!>?
 virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.Password.get -> string?
 virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.Proxy.get -> StackExchange.Redis.Proxy
 virtual StackExchange.Redis.Configuration.DefaultOptionsProvider.ReconnectRetryPolicy.get -> StackExchange.Redis.IReconnectRetryPolicy?

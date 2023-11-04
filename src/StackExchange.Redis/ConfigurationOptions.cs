@@ -173,7 +173,7 @@ namespace StackExchange.Redis
 
         private BacklogPolicy? backlogPolicy;
 
-        private ILoggerFactory? loggerFactory;
+        private Func<Type, ILogger>? loggerFactory;
 
         /// <summary>
         /// A LocalCertificateSelectionCallback delegate responsible for selecting the certificate used for authentication; note
@@ -464,10 +464,10 @@ namespace StackExchange.Redis
         }
 
         /// <summary>
-        /// The <see cref="ILoggerFactory"/> to get loggers for connection events.
+        /// The logger factory to get loggers for connection events.
         /// Note: changes here only affect <see cref="ConnectionMultiplexer"/>s created after.
         /// </summary>
-        public ILoggerFactory? LoggerFactory
+        public Func<Type, ILogger>? LoggerFactory
         {
             get => loggerFactory ?? Defaults.LoggerFactory;
             set => loggerFactory = value;

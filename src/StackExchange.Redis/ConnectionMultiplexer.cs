@@ -43,7 +43,7 @@ namespace StackExchange.Redis
 
         private volatile bool _isDisposed;
         internal bool IsDisposed => _isDisposed;
-        internal ILogger<ConnectionMultiplexer>? Logger { get; }
+        internal ILogger? Logger { get; }
 
         internal CommandMap CommandMap { get; }
         internal EndPointCollection EndPoints { get; }
