@@ -3,13 +3,13 @@
     <Nullable>enable</Nullable>
     <!-- extend the default lib targets for the main lib; mostly because of "vectors" -->
     <TargetFrameworks>net461;netstandard2.0;net472;netcoreapp3.1;net6.0</TargetFrameworks>
-    <Description>Fork StackExchange.Redis</Description>
+    <Description>Fork StackExchange.Redis without dependency Microsoft.Extensions.Logging.Abstractions</Description>
     <AssemblyName>StackExchange.Redis</AssemblyName>
     <AssemblyTitle>StackExchange.Redis</AssemblyTitle>
     <PackageId>IT.Redis</PackageId>
     <PackageReadmeFile>Readme.md</PackageReadmeFile>
     <PackageIcon>Icon.png</PackageIcon>
-    <Version>2.7.4-pre4</Version>
+    <Version>2.7.4-pre5</Version>
     <PackageTags>Async;Redis;Cache;PubSub;Messaging</PackageTags>
     <SignAssembly>true</SignAssembly>
     <PublicSign Condition=" '$(OS)' != 'Windows_NT' ">true</PublicSign>
