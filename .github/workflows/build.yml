@@ -25,10 +25,10 @@ jobs:
             7.0.x
     
       - name: Restore
-        run: dotnet restore StackExchange.Redis.sln
+        run: dotnet restore IT.Redis.sln
     
       - name: Build
-        run: dotnet build StackExchange.Redis.sln --configuration Release --no-restore 
+        run: dotnet build IT.Redis.sln --configuration Release --no-restore 
 
   publish:
     needs: [build]
