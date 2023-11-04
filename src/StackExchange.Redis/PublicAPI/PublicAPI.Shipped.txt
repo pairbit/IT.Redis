@@ -1337,7 +1337,6 @@ StackExchange.Redis.RedisKey.Append(StackExchange.Redis.RedisKey suffix) -> Stac
 StackExchange.Redis.RedisKey.Equals(StackExchange.Redis.RedisKey other) -> bool
 StackExchange.Redis.RedisKey.Prepend(StackExchange.Redis.RedisKey prefix) -> StackExchange.Redis.RedisKey
 StackExchange.Redis.RedisKey.RedisKey() -> void
-StackExchange.Redis.RedisKey.RedisKey(string? key) -> void
 StackExchange.Redis.RedisResult
 StackExchange.Redis.RedisResult.RedisResult() -> void
 StackExchange.Redis.RedisResult.ToDictionary(System.Collections.Generic.IEqualityComparer<string!>? comparer = null) -> System.Collections.Generic.Dictionary<string!, StackExchange.Redis.RedisResult!>!
@@ -1687,19 +1686,14 @@ static StackExchange.Redis.RedisFeatures.operator !=(StackExchange.Redis.RedisFe
 static StackExchange.Redis.RedisFeatures.operator ==(StackExchange.Redis.RedisFeatures left, StackExchange.Redis.RedisFeatures right) -> bool
 static StackExchange.Redis.RedisKey.implicit operator byte[]?(StackExchange.Redis.RedisKey key) -> byte[]?
 static StackExchange.Redis.RedisKey.implicit operator StackExchange.Redis.RedisKey(byte[]? key) -> StackExchange.Redis.RedisKey
-static StackExchange.Redis.RedisKey.implicit operator StackExchange.Redis.RedisKey(string? key) -> StackExchange.Redis.RedisKey
 static StackExchange.Redis.RedisKey.implicit operator string?(StackExchange.Redis.RedisKey key) -> string?
 static StackExchange.Redis.RedisKey.operator !=(byte[]! x, StackExchange.Redis.RedisKey y) -> bool
 static StackExchange.Redis.RedisKey.operator !=(StackExchange.Redis.RedisKey x, byte[]! y) -> bool
 static StackExchange.Redis.RedisKey.operator !=(StackExchange.Redis.RedisKey x, StackExchange.Redis.RedisKey y) -> bool
-static StackExchange.Redis.RedisKey.operator !=(StackExchange.Redis.RedisKey x, string! y) -> bool
-static StackExchange.Redis.RedisKey.operator !=(string! x, StackExchange.Redis.RedisKey y) -> bool
 static StackExchange.Redis.RedisKey.operator +(StackExchange.Redis.RedisKey x, StackExchange.Redis.RedisKey y) -> StackExchange.Redis.RedisKey
 static StackExchange.Redis.RedisKey.operator ==(byte[]! x, StackExchange.Redis.RedisKey y) -> bool
 static StackExchange.Redis.RedisKey.operator ==(StackExchange.Redis.RedisKey x, byte[]! y) -> bool
 static StackExchange.Redis.RedisKey.operator ==(StackExchange.Redis.RedisKey x, StackExchange.Redis.RedisKey y) -> bool
-static StackExchange.Redis.RedisKey.operator ==(StackExchange.Redis.RedisKey x, string! y) -> bool
-static StackExchange.Redis.RedisKey.operator ==(string! x, StackExchange.Redis.RedisKey y) -> bool
 static StackExchange.Redis.RedisResult.Create(StackExchange.Redis.RedisChannel channel) -> StackExchange.Redis.RedisResult!
 static StackExchange.Redis.RedisResult.Create(StackExchange.Redis.RedisKey key) -> StackExchange.Redis.RedisResult!
 static StackExchange.Redis.RedisResult.Create(StackExchange.Redis.RedisResult![]! values) -> StackExchange.Redis.RedisResult!

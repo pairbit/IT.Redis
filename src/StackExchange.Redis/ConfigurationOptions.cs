@@ -739,7 +739,7 @@ namespace StackExchange.Redis
             var key = TieBreaker;
             if (!IsSentinel && !string.IsNullOrWhiteSpace(key))
             {
-                tieBreaker = key;
+                tieBreaker = Encoding.UTF8.GetBytes(key);
                 return true;
             }
             tieBreaker = default;
