@@ -46,8 +46,8 @@ internal sealed class TextWriterLogger : ILogger
     }
 
     public static string GetMessage(int level, Exception? exception, string? message)
-        => exception != null ? $"[{(LogLevel)level}] {message} -> {exception.Message} -> {exception.StackTrace}"
-                             : $"[{(LogLevel)level}] {message}";
+        => exception != null ? $"[{(Level)level}] {message} -> {exception.Message} -> {exception.StackTrace}"
+                             : $"[{(Level)level}] {message}";
 }
 
 internal static class TextWriterLoggerExtensions

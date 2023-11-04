@@ -10,6 +10,8 @@ using Xunit.Abstractions;
 
 namespace StackExchange.Redis.Tests;
 
+using ILogger = Microsoft.Extensions.Logging.ILogger;
+
 [Collection(NonParallelCollection.Name)]
 public class LoggerTests : TestBase
 {
@@ -27,7 +29,8 @@ public class LoggerTests : TestBase
         var criticalLogger = new TestLogger(LogLevel.Critical, Writer);
 
         var options = ConfigurationOptions.Parse(GetConfiguration());
-        options.LoggerFactory = new TestWrapperLoggerFactory(new TestMultiLogger(traceLogger, debugLogger, infoLogger, warningLogger, errorLogger, criticalLogger));
+        var wrapped = new TestWrapperLoggerFactory(new TestMultiLogger(traceLogger, debugLogger, infoLogger, warningLogger, errorLogger, criticalLogger));
+        options.LoggerFactory = Helpers.RedisLogger.GetFactory(wrapped);
 
         using var conn = await ConnectionMultiplexer.ConnectAsync(options);
         // We expect more at the trace level: GET, ECHO, PING on commands
@@ -46,7 +49,7 @@ public class LoggerTests : TestBase
     {
         var options = ConfigurationOptions.Parse(GetConfiguration());
         var wrapped = new TestWrapperLoggerFactory(NullLogger.Instance);
-        options.LoggerFactory = wrapped;
+        options.LoggerFactory = Helpers.RedisLogger.GetFactory(wrapped);
 
         using var conn = await ConnectionMultiplexer.ConnectAsync(options);
         Assert.True(wrapped.Logger.LogCount > 0);

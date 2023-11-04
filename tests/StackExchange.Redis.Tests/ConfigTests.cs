@@ -595,7 +595,7 @@ public class ConfigTests : TestBase
     public async Task MutableOptions()
     {
         var options = ConfigurationOptions.Parse(TestConfig.Current.PrimaryServerAndPort + ",name=Details");
-        options.LoggerFactory = NullLoggerFactory.Instance;
+        options.LoggerFactory = Helpers.RedisLogger.NullFactory;
         var originalConfigChannel = options.ConfigurationChannel = "originalConfig";
         var originalUser = options.User = "originalUser";
         var originalPassword = options.Password = "originalPassword";
