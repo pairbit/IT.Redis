@@ -335,6 +335,14 @@ namespace StackExchange.Redis
                     return false;
             }
 
+            if (xType == StorageType.Sequence &&
+                (yType == StorageType.MemoryManager || yType == StorageType.MemoryManager))
+                return x.RawSequence().SequenceEqual(y.RawSpan());
+
+            if (yType == StorageType.Sequence &&
+                (xType == StorageType.MemoryManager || xType == StorageType.MemoryManager))
+                return y.RawSequence().SequenceEqual(x.RawSpan());
+
             // otherwise, compare as strings
             return (string?)x == (string?)y;
         }
