@@ -1452,6 +1452,8 @@ HaveString:
             {
                 case StorageType.MemoryManager or StorageType.ByteArray:
                     return ValueCondition.CalculateDigest(RawSpan());
+                case StorageType.Sequence:
+                    return ValueCondition.CalculateDigest(RawSequence());
                 case StorageType.Null:
                     return ValueCondition.NotExists; // interpret === null as "not exists"
                 default:
