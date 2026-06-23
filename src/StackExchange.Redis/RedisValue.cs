@@ -268,6 +268,13 @@ namespace StackExchange.Redis
         /// <param name="y">The second <see cref="RedisValue"/> to compare.</param>
         public static bool operator !=(RedisValue x, RedisValue y) => !(x == y);
 
+        internal ReadOnlySequence<byte> RawSequence()
+        {
+            if (_obj is ReadOnlySequence<byte> seq) return seq;
+            ThrowRawType();
+            return default;
+        }
+
         internal ReadOnlySpan<byte> RawSpan()
         {
             if (_obj is byte[] b) return new ReadOnlySpan<byte>(b, _index, _length);
@@ -313,6 +320,8 @@ namespace StackExchange.Redis
                         return x.RawString() == y.RawString();
                     case StorageType.ByteArray or StorageType.MemoryManager:
                         return x.RawSpan().SequenceEqual(y.RawSpan());
+                    case StorageType.Sequence:
+                        return x.RawSequence().SequenceEqual(y.RawSequence());
                 }
             }
 
@@ -438,6 +447,7 @@ namespace StackExchange.Redis
             MemoryManager,
             ByteArray,
             String,
+            Sequence,
             Unknown,
         }
 
@@ -453,6 +463,7 @@ namespace StackExchange.Redis
                 if (obj is byte[]) return StorageType.ByteArray;
                 if (obj == Sentinel_UnsignedInteger) return StorageType.UInt64;
                 if (obj is MemoryManager<byte>) return StorageType.MemoryManager;
+                if (obj is ReadOnlySequence<byte>) return StorageType.Sequence;
                 return StorageType.Unknown;
             }
         }
@@ -498,7 +509,7 @@ namespace StackExchange.Redis
             StorageType.Null => 0,
             StorageType.MemoryManager or StorageType.ByteArray => _length,
             StorageType.String => Encoding.UTF8.GetByteCount(RawString()),
-            StorageType.Int64 => Format.MeasureInt64(OverlappedValueInt64),
+            StorageType.Int64 or StorageType.Sequence => Format.MeasureInt64(OverlappedValueInt64),
             StorageType.UInt64 => Format.MeasureUInt64(OverlappedValueUInt64),
             StorageType.Double => Format.MeasureDouble(OverlappedValueDouble),
             _ => throw new InvalidOperationException("Unable to compute length of type: " + Type),
@@ -535,6 +546,8 @@ namespace StackExchange.Redis
                             return string.CompareOrdinal(x.RawString(), y.RawString());
                         case StorageType.MemoryManager or StorageType.ByteArray:
                             return x.RawSpan().SequenceCompareTo(y.RawSpan());
+                        case StorageType.Sequence:
+                            return x.RawSequence().SequenceCompareTo(y.RawSequence());
                     }
                 }
 
@@ -928,6 +941,10 @@ namespace StackExchange.Redis
                     {
                         return ToHex(span);
                     }
+                case StorageType.Sequence:
+                    var seq = value.RawSequence();
+                    if (seq.IsEmpty) return "";
+                    return Format.GetString(seq);
                 default:
                     throw new InvalidOperationException();
             }
@@ -971,6 +988,8 @@ namespace StackExchange.Redis
                     return arr;
                 case StorageType.ByteArray or StorageType.MemoryManager:
                     return value.RawSpan().ToArray();
+                case StorageType.Sequence:
+                    return value.RawSequence().ToArray();
                 case StorageType.Int64:
                     Debug.Assert(Format.MaxInt64TextLen <= 24);
                     Span<byte> span = stackalloc byte[24];
@@ -1000,7 +1019,7 @@ namespace StackExchange.Redis
             StorageType.Null => 0,
             StorageType.MemoryManager or StorageType.ByteArray => _length,
             StorageType.String => Encoding.UTF8.GetByteCount(RawString()),
-            StorageType.Int64 => Format.MeasureInt64(OverlappedValueInt64),
+            StorageType.Int64 or StorageType.Sequence => Format.MeasureInt64(OverlappedValueInt64),
             StorageType.UInt64 => Format.MeasureUInt64(OverlappedValueUInt64),
             StorageType.Double => Format.MeasureDouble(OverlappedValueDouble),
             _ => ThrowUnableToMeasure(),
@@ -1014,7 +1033,7 @@ namespace StackExchange.Redis
             StorageType.Null => 0,
             StorageType.MemoryManager or StorageType.ByteArray => _length,
             StorageType.String => Encoding.UTF8.GetMaxByteCount(RawString().Length),
-            StorageType.Int64 => Format.MaxInt64TextLen,
+            StorageType.Int64 or StorageType.Sequence => Format.MaxInt64TextLen,
             StorageType.UInt64 => Format.MaxInt64TextLen,
             StorageType.Double => Format.MaxDoubleTextLen,
             _ => ThrowUnableToMeasure(),
@@ -1484,6 +1503,8 @@ HaveString:
             {
                 case StorageType.MemoryManager or StorageType.ByteArray:
                     return RawSpan().StartsWith(value);
+                case StorageType.Sequence:
+                    return RawSequence().StartsWith(value);
                 case StorageType.Int64:
                     Span<byte> buffer = stackalloc byte[Format.MaxInt64TextLen];
                     len = Format.FormatInt64(OverlappedValueInt64, buffer);
