@@ -1082,6 +1082,10 @@ namespace StackExchange.Redis
                 case StorageType.MemoryManager or StorageType.ByteArray:
                     RawSpan().CopyTo(destination);
                     return _length;
+                case StorageType.Sequence:
+                    var slen = checked((int)_valueInt64);
+                    RawSequence().CopyTo(destination);
+                    return slen;
                 case StorageType.String:
                     return Encoding.UTF8.GetBytes(RawString().AsSpan(), destination);
                 case StorageType.Int64:
@@ -1106,6 +1110,8 @@ namespace StackExchange.Redis
                     return 0;
                 case StorageType.MemoryManager or StorageType.ByteArray:
                     return Encoding.UTF8.GetChars(RawSpan(), destination);
+                case StorageType.Sequence:
+                    return Encoding.UTF8.GetChars(RawSequence(), destination);
                 case StorageType.String:
                     var span = RawString().AsSpan();
                     span.CopyTo(destination);
