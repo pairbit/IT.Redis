@@ -1427,6 +1427,11 @@ namespace StackExchange.Redis
                 case StorageType.ByteArray:
                     leased = null;
                     return new ReadOnlyMemory<byte>((byte[])_obj!, _index, _length);
+                case StorageType.Sequence:
+                    var slen = checked((int)_valueInt64);
+                    leased = ArrayPool<byte>.Shared.Rent(slen);
+                    RawSequence().CopyTo(leased);
+                    return new ReadOnlyMemory<byte>(leased, 0, slen);
                 case StorageType.String:
                     string s = RawString();
 HaveString:
