@@ -84,7 +84,7 @@ namespace StackExchange.Redis
 
         private RedisValue(ReadOnlySequence<byte> value)
         {
-            _valueInt64 = value.Length;
+            _length = checked((int)value.Length);
             _obj = value;
         }
 
@@ -508,9 +508,9 @@ namespace StackExchange.Redis
         public long Length() => Type switch
         {
             StorageType.Null => 0,
-            StorageType.MemoryManager or StorageType.ByteArray => _length,
+            StorageType.MemoryManager or StorageType.ByteArray or StorageType.Sequence => _length,
             StorageType.String => Encoding.UTF8.GetByteCount(RawString()),
-            StorageType.Int64 or StorageType.Sequence => Format.MeasureInt64(OverlappedValueInt64),
+            StorageType.Int64 => Format.MeasureInt64(OverlappedValueInt64),
             StorageType.UInt64 => Format.MeasureUInt64(OverlappedValueUInt64),
             StorageType.Double => Format.MeasureDouble(OverlappedValueDouble),
             _ => throw new InvalidOperationException("Unable to compute length of type: " + Type),
@@ -1019,9 +1019,9 @@ namespace StackExchange.Redis
         public int GetByteCount() => Type switch
         {
             StorageType.Null => 0,
-            StorageType.MemoryManager or StorageType.ByteArray => _length,
+            StorageType.MemoryManager or StorageType.ByteArray or StorageType.Sequence => _length,
             StorageType.String => Encoding.UTF8.GetByteCount(RawString()),
-            StorageType.Int64 or StorageType.Sequence => Format.MeasureInt64(OverlappedValueInt64),
+            StorageType.Int64 => Format.MeasureInt64(OverlappedValueInt64),
             StorageType.UInt64 => Format.MeasureUInt64(OverlappedValueUInt64),
             StorageType.Double => Format.MeasureDouble(OverlappedValueDouble),
             _ => ThrowUnableToMeasure(),
@@ -1033,9 +1033,9 @@ namespace StackExchange.Redis
         internal int GetMaxByteCount() => Type switch
         {
             StorageType.Null => 0,
-            StorageType.MemoryManager or StorageType.ByteArray => _length,
+            StorageType.MemoryManager or StorageType.ByteArray or StorageType.Sequence => _length,
             StorageType.String => Encoding.UTF8.GetMaxByteCount(RawString().Length),
-            StorageType.Int64 or StorageType.Sequence => Format.MaxInt64TextLen,
+            StorageType.Int64 => Format.MaxInt64TextLen,
             StorageType.UInt64 => Format.MaxInt64TextLen,
             StorageType.Double => Format.MaxDoubleTextLen,
             _ => ThrowUnableToMeasure(),
@@ -1091,9 +1091,8 @@ namespace StackExchange.Redis
                     RawSpan().CopyTo(destination);
                     return _length;
                 case StorageType.Sequence:
-                    var slen = checked((int)_valueInt64);
                     RawSequence().CopyTo(destination);
-                    return slen;
+                    return _length;
                 case StorageType.String:
                     return Encoding.UTF8.GetBytes(RawString().AsSpan(), destination);
                 case StorageType.Int64:
@@ -1442,10 +1441,9 @@ namespace StackExchange.Redis
                     leased = null;
                     return new ReadOnlyMemory<byte>((byte[])_obj!, _index, _length);
                 case StorageType.Sequence:
-                    var slen = checked((int)_valueInt64);
-                    leased = ArrayPool<byte>.Shared.Rent(slen);
+                    leased = ArrayPool<byte>.Shared.Rent(_length);
                     RawSequence().CopyTo(leased);
-                    return new ReadOnlyMemory<byte>(leased, 0, slen);
+                    return new ReadOnlyMemory<byte>(leased, 0, _length);
                 case StorageType.String:
                     string s = RawString();
 HaveString:

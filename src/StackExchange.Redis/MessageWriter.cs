@@ -582,7 +582,7 @@ internal readonly ref struct MessageWriter
         }
         else
         {
-            var span = writer.GetSpan(3 + Format.MaxInt64TextLen);
+            var span = writer.GetSpan(3 + Format.MaxInt32TextLen);
             span[0] = (byte)'$';
             int bytes = WriteRaw(span, value.Length, offset: 1);
             writer.Advance(bytes);
