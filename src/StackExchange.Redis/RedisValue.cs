@@ -84,15 +84,8 @@ namespace StackExchange.Redis
 
         private RedisValue(ReadOnlySequence<byte> value)
         {
-            if (value.IsEmpty)
-            {
-                this = EmptyString;
-            }
-            else
-            {
-                _valueInt64 = value.Length;
-                _obj = value;
-            }
+            _valueInt64 = value.Length;
+            _obj = value;
         }
 
         private RedisValue(long value)
@@ -687,7 +680,8 @@ namespace StackExchange.Redis
         /// Creates a new <see cref="RedisValue"/> from a <see cref="T:ReadOnlySequence{byte}"/>.
         /// </summary>
         /// <param name="value">The <see cref="T:ReadOnlySequence{byte}"/> to cast to a <see cref="RedisValue"/>.</param>
-        public static implicit operator RedisValue(ReadOnlySequence<byte> value) => new(value);
+        public static implicit operator RedisValue(ReadOnlySequence<byte> value)
+            => value.IsSingleSegment ? new(value.First) : new(value);
 
         /// <summary>
         /// Creates a new <see cref="RedisValue"/> from a <see cref="T:Memory{byte}"/>.
