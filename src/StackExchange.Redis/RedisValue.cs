@@ -82,6 +82,19 @@ namespace StackExchange.Redis
             }
         }
 
+        private RedisValue(ReadOnlySequence<byte> value)
+        {
+            if (value.IsEmpty)
+            {
+                this = EmptyString;
+            }
+            else
+            {
+                _valueInt64 = value.Length;
+                _obj = value;
+            }
+        }
+
         private RedisValue(long value)
         {
             Unsafe.SkipInit(out this);
@@ -578,6 +591,7 @@ namespace StackExchange.Redis
                 case ulong v: return v;
                 case float v: return v;
                 case ReadOnlyMemory<byte> v: return v;
+                case ReadOnlySequence<byte> v: return v;
                 case Memory<byte> v: return v;
                 case RedisValue v: return v;
                 default:
@@ -655,6 +669,12 @@ namespace StackExchange.Redis
         /// </summary>
         /// <param name="value">The <see cref="T:ReadOnlyMemory{byte}"/> to convert to a <see cref="RedisValue"/>.</param>
         public static implicit operator RedisValue(ReadOnlyMemory<byte> value) => new(value);
+
+        /// <summary>
+        /// Creates a new <see cref="RedisValue"/> from a <see cref="T:ReadOnlySequence{byte}"/>.
+        /// </summary>
+        /// <param name="value">The <see cref="T:ReadOnlySequence{byte}"/> to cast to a <see cref="RedisValue"/>.</param>
+        public static implicit operator RedisValue(ReadOnlySequence<byte> value) => new(value);
 
         /// <summary>
         /// Creates a new <see cref="RedisValue"/> from a <see cref="T:Memory{byte}"/>.
@@ -1100,6 +1120,16 @@ namespace StackExchange.Redis
             return (byte[]?)value;
         }
 
+        /// <summary>
+        /// Converts a <see cref="RedisValue"/> to a <see cref="ReadOnlySequence{T}"/>.
+        /// </summary>
+        /// <param name="value">The <see cref="RedisValue"/> to convert.</param>
+        public static implicit operator ReadOnlySequence<byte>(RedisValue value)
+        {
+            if (value._obj is ReadOnlySequence<byte> seq) return seq;
+            return new((ReadOnlyMemory<byte>)value);
+        }
+
         TypeCode IConvertible.GetTypeCode() => TypeCode.Object;
 
         bool IConvertible.ToBoolean(IFormatProvider? provider) => (bool)this;
@@ -1120,6 +1150,7 @@ namespace StackExchange.Redis
             if (conversionType == null) throw new ArgumentNullException(nameof(conversionType));
             if (conversionType == typeof(byte[])) return ((byte[]?)this)!;
             if (conversionType == typeof(ReadOnlyMemory<byte>)) return (ReadOnlyMemory<byte>)this;
+            if (conversionType == typeof(ReadOnlySequence<byte>)) return (ReadOnlySequence<byte>)this;
             if (conversionType == typeof(RedisValue)) return this;
             return System.Type.GetTypeCode(conversionType) switch
             {
