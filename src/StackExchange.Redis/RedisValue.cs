@@ -88,6 +88,13 @@ namespace StackExchange.Redis
             _obj = value;
         }
 
+        private RedisValue(ReadOnlySequenceSegment<byte> start, int length, int count)
+        {
+            _index = count;
+            _length = length;
+            _obj = start;
+        }
+
         private RedisValue(long value)
         {
             Unsafe.SkipInit(out this);
@@ -263,6 +270,17 @@ namespace StackExchange.Redis
 
         internal ReadOnlySequence<byte> RawSequence()
         {
+            if (_obj is ReadOnlySequenceSegment<byte> start)
+            {
+                var current = start;
+                var endIndex = _length;
+                for (int i = _index - 1; i > 0; i--)
+                {
+                    endIndex -= current.Memory.Length;
+                    current = current.Next ?? throw new InvalidOperationException("EndSegment is null");
+                }
+                return new ReadOnlySequence<byte>(start, 0, current, endIndex);
+            }
             if (_obj is ReadOnlySequence<byte> seq) return seq;
             ThrowRawType();
             return default;
@@ -464,6 +482,7 @@ namespace StackExchange.Redis
                 if (obj is byte[]) return StorageType.ByteArray;
                 if (obj == Sentinel_UnsignedInteger) return StorageType.UInt64;
                 if (obj is MemoryManager<byte>) return StorageType.MemoryManager;
+                if (obj is ReadOnlySequenceSegment<byte>) return StorageType.Sequence;
                 if (obj is ReadOnlySequence<byte>) return StorageType.Sequence;
                 return StorageType.Unknown;
             }
@@ -689,7 +708,30 @@ namespace StackExchange.Redis
         /// </summary>
         /// <param name="value">The <see cref="T:ReadOnlySequence{byte}"/> to cast to a <see cref="RedisValue"/>.</param>
         public static implicit operator RedisValue(ReadOnlySequence<byte> value)
-            => value.IsSingleSegment ? new(value.First) : new(value);
+        {
+            if (value.IsSingleSegment) return new(value.First);
+
+            var length = checked((int)value.Length);
+            var position = value.Start;
+            var offset = position.GetInteger();
+            if (offset == 0)
+            {
+                var start = (ReadOnlySequenceSegment<byte>?)position.GetObject() ?? throw new InvalidOperationException("StartSegment is null");
+                var current = start;
+                var end = value.End.GetObject() ?? throw new InvalidOperationException("EndSegment is null");
+                var count = 1;
+                while (!ReferenceEquals(current, end))
+                {
+                    count++;
+                    current = current.Next ?? throw new InvalidOperationException("NextSegment is null");
+                }
+                return new(start, length, count);
+            }
+            else
+            {
+                return new(value);
+            }
+        }
 
         /// <summary>
         /// Creates a new <see cref="RedisValue"/> from a <see cref="T:Memory{byte}"/>.
@@ -1153,6 +1195,7 @@ namespace StackExchange.Redis
         public static implicit operator ReadOnlySequence<byte>(RedisValue value)
         {
             if (value._obj is ReadOnlySequence<byte> seq) return seq;
+            if (value._obj is ReadOnlySequenceSegment<byte>) return value.RawSequence();
             return new((ReadOnlyMemory<byte>)value);
         }
 
