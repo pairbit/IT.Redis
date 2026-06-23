@@ -336,11 +336,11 @@ namespace StackExchange.Redis
             }
 
             if (xType == StorageType.Sequence &&
-                (yType == StorageType.MemoryManager || yType == StorageType.MemoryManager))
+                (yType == StorageType.ByteArray || yType == StorageType.MemoryManager))
                 return x.RawSequence().SequenceEqual(y.RawSpan());
 
             if (yType == StorageType.Sequence &&
-                (xType == StorageType.MemoryManager || xType == StorageType.MemoryManager))
+                (xType == StorageType.ByteArray || xType == StorageType.MemoryManager))
                 return y.RawSequence().SequenceEqual(x.RawSpan());
 
             // otherwise, compare as strings
