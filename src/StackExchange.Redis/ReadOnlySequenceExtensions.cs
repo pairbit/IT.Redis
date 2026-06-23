@@ -6,6 +6,11 @@ namespace StackExchange.Redis;
 
 internal static class ReadOnlySequenceExtensions
 {
+    public static bool StartsWith(this in ReadOnlySequence<byte> sequence, in ReadOnlySequence<byte> value)
+    {
+        throw new NotImplementedException();
+    }
+
     public static bool StartsWith(this in ReadOnlySequence<byte> sequence, ReadOnlySpan<byte> value)
         => StartsWith(sequence, value, sequence.Start);
 

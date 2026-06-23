@@ -1377,7 +1377,8 @@ namespace StackExchange.Redis
             if (IsNullOrEmpty) return false;
 
             var thisType = Type;
-            if (thisType == value.Type) // same? can often optimize
+            var otherType = value.Type;
+            if (thisType == otherType) // same? can often optimize
             {
                 switch (thisType)
                 {
@@ -1387,7 +1388,19 @@ namespace StackExchange.Redis
                         return sThis.StartsWith(sOther, StringComparison.Ordinal);
                     case StorageType.MemoryManager or StorageType.ByteArray:
                         return RawSpan().StartsWith(value.RawSpan());
+                    case StorageType.Sequence:
+                        return RawSequence().StartsWith(value.RawSequence());
                 }
+            }
+            if (thisType == StorageType.Sequence &&
+                (otherType == StorageType.MemoryManager || otherType == StorageType.ByteArray))
+            {
+                return RawSequence().StartsWith(value.RawSpan());
+            }
+            if (otherType == StorageType.Sequence &&
+                (thisType == StorageType.MemoryManager || thisType == StorageType.ByteArray))
+            {
+                return value.RawSequence().StartsWith(RawSpan());
             }
             byte[]? arr0 = null, arr1 = null;
             try
