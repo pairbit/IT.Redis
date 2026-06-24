@@ -82,19 +82,6 @@ namespace StackExchange.Redis
             }
         }
 
-        private RedisValue(ReadOnlySequence<byte> value)
-        {
-            _length = checked((int)value.Length);
-            _obj = value;
-        }
-
-        private RedisValue(ReadOnlySequenceSegment<byte> start, int length, int count)
-        {
-            _index = count;
-            _length = length;
-            _obj = start;
-        }
-
         private RedisValue(long value)
         {
             Unsafe.SkipInit(out this);
@@ -268,20 +255,24 @@ namespace StackExchange.Redis
         /// <param name="y">The second <see cref="RedisValue"/> to compare.</param>
         public static bool operator !=(RedisValue x, RedisValue y) => !(x == y);
 
+        private static ReadOnlySequence<byte> GetSequence(ReadOnlySequenceSegment<byte> startSegment, int startIndex, int length)
+        {
+            var endIndex = length - (startSegment.Memory.Length - startIndex);
+            var endSegment = startSegment;
+            do
+            {
+                endSegment = endSegment.Next ?? throw new InvalidOperationException("EndSegment is null");
+                var len = endSegment.Memory.Length;
+                if (endIndex <= len) break;
+                endIndex -= len;
+            }
+            while (true);
+            return new ReadOnlySequence<byte>(startSegment, startIndex, endSegment, endIndex);
+        }
+
         internal ReadOnlySequence<byte> RawSequence()
         {
-            if (_obj is ReadOnlySequenceSegment<byte> start)
-            {
-                var current = start;
-                var endIndex = _length;
-                for (int i = _index - 1; i > 0; i--)
-                {
-                    endIndex -= current.Memory.Length;
-                    current = current.Next ?? throw new InvalidOperationException("EndSegment is null");
-                }
-                return new ReadOnlySequence<byte>(start, 0, current, endIndex);
-            }
-            if (_obj is ReadOnlySequence<byte> seq) return seq;
+            if (_obj is ReadOnlySequenceSegment<byte> s) return GetSequence(s, _index, _length);
             ThrowRawType();
             return default;
         }
@@ -483,7 +474,6 @@ namespace StackExchange.Redis
                 if (obj == Sentinel_UnsignedInteger) return StorageType.UInt64;
                 if (obj is MemoryManager<byte>) return StorageType.MemoryManager;
                 if (obj is ReadOnlySequenceSegment<byte>) return StorageType.Sequence;
-                if (obj is ReadOnlySequence<byte>) return StorageType.Sequence;
                 return StorageType.Unknown;
             }
         }
@@ -624,7 +614,6 @@ namespace StackExchange.Redis
                 case ulong v: return v;
                 case float v: return v;
                 case ReadOnlyMemory<byte> v: return v;
-                case ReadOnlySequence<byte> v: return v;
                 case Memory<byte> v: return v;
                 case RedisValue v: return v;
                 default:
@@ -712,25 +701,9 @@ namespace StackExchange.Redis
             if (value.IsSingleSegment) return new(value.First);
 
             var length = checked((int)value.Length);
-            var position = value.Start;
-            var offset = position.GetInteger();
-            if (offset == 0)
-            {
-                var start = (ReadOnlySequenceSegment<byte>?)position.GetObject() ?? throw new InvalidOperationException("StartSegment is null");
-                var current = start;
-                var end = value.End.GetObject() ?? throw new InvalidOperationException("EndSegment is null");
-                var count = 1;
-                while (!ReferenceEquals(current, end))
-                {
-                    count++;
-                    current = current.Next ?? throw new InvalidOperationException("NextSegment is null");
-                }
-                return new(start, length, count);
-            }
-            else
-            {
-                return new(value);
-            }
+            var pos = value.Start;
+            var segment = pos.GetObject() ?? throw new InvalidOperationException("StartSegment is null");
+            return new((ReadOnlySequenceSegment<byte>)segment, length, pos.GetInteger());
         }
 
         /// <summary>
@@ -1194,8 +1167,7 @@ namespace StackExchange.Redis
         /// <param name="value">The <see cref="RedisValue"/> to convert.</param>
         public static implicit operator ReadOnlySequence<byte>(RedisValue value)
         {
-            if (value._obj is ReadOnlySequence<byte> seq) return seq;
-            if (value._obj is ReadOnlySequenceSegment<byte>) return value.RawSequence();
+            if (value._obj is ReadOnlySequenceSegment<byte> s) return GetSequence(s, value._index, value._length);
             return new((ReadOnlyMemory<byte>)value);
         }
 
@@ -1219,7 +1191,6 @@ namespace StackExchange.Redis
             if (conversionType == null) throw new ArgumentNullException(nameof(conversionType));
             if (conversionType == typeof(byte[])) return ((byte[]?)this)!;
             if (conversionType == typeof(ReadOnlyMemory<byte>)) return (ReadOnlyMemory<byte>)this;
-            if (conversionType == typeof(ReadOnlySequence<byte>)) return (ReadOnlySequence<byte>)this;
             if (conversionType == typeof(RedisValue)) return this;
             return System.Type.GetTypeCode(conversionType) switch
             {
