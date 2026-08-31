@@ -23,6 +23,8 @@ StackExchange.Redis.ClusterSlotAssignment.Primary.get -> StackExchange.Redis.Clu
 StackExchange.Redis.ClusterSlotAssignment.Replicas.get -> System.Collections.Generic.IReadOnlyList<StackExchange.Redis.ClusterSlotNode!>!
 StackExchange.Redis.ClusterSlotAssignment.Slots.get -> StackExchange.Redis.SlotRange
 StackExchange.Redis.ClusterSlotNode
+StackExchange.Redis.IScriptRequestDisposer
+StackExchange.Redis.IScriptRequestDisposer.Dispose(System.ReadOnlyMemory<StackExchange.Redis.RedisKeyOrValue> args) -> void
 StackExchange.Redis.RedisKeyOrValue
 StackExchange.Redis.RedisKeyOrValue.RedisKeyOrValue() -> void
 StackExchange.Redis.RedisKeyOrValue.RedisKeyOrValue(in StackExchange.Redis.RedisKey key) -> void
