@@ -2039,6 +2039,21 @@ namespace StackExchange.Redis
             }
         }
 
+        public Lease<byte>? ScriptEvaluateMemoryLease(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None)
+        {
+            var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA : RedisCommand.EVAL;
+            var msg = new ScriptEvalMemoryMessage(Database, flags, command, script, args, argsDisposer);
+            try
+            {
+                return ExecuteSync(msg, ResultProcessor.LeaseScript);
+            }
+            catch (RedisServerException) when (msg.IsScriptUnavailable)
+            {
+                // could be a NOSCRIPT; for a sync call, we can re-issue that without problem
+                return ExecuteSync(msg, ResultProcessor.LeaseScript);
+            }
+        }
+
         public RedisResult ScriptEvaluate(string script, RedisKey[]? keys = null, RedisValue[]? values = null, CommandFlags flags = CommandFlags.None)
         {
             var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA : RedisCommand.EVAL;
@@ -2083,6 +2098,22 @@ namespace StackExchange.Redis
             {
                 // could be a NOSCRIPT; for a sync call, we can re-issue that without problem
                 return await ExecuteAsync(msg, ResultProcessor.ScriptResult, defaultValue: RedisResult.NullSingle).ForAwait();
+            }
+        }
+
+        public async Task<Lease<byte>?> ScriptEvaluateMemoryLeaseAsync(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None)
+        {
+            var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA : RedisCommand.EVAL;
+            var msg = new ScriptEvalMemoryMessage(Database, flags, command, script, args, argsDisposer);
+
+            try
+            {
+                return await ExecuteAsync(msg, ResultProcessor.LeaseScript).ForAwait();
+            }
+            catch (RedisServerException) when (msg.IsScriptUnavailable)
+            {
+                // could be a NOSCRIPT; for a sync call, we can re-issue that without problem
+                return await ExecuteAsync(msg, ResultProcessor.LeaseScript).ForAwait();
             }
         }
 
@@ -2133,6 +2164,21 @@ namespace StackExchange.Redis
             }
         }
 
+        public Lease<byte>? ScriptEvaluateMemoryReadOnlyLease(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None)
+        {
+            var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA_RO : RedisCommand.EVAL_RO;
+            var msg = new ScriptEvalMemoryMessage(Database, flags, command, script, args, argsDisposer);
+            try
+            {
+                return ExecuteSync(msg, ResultProcessor.LeaseScript);
+            }
+            catch (RedisServerException) when (msg.IsScriptUnavailable)
+            {
+                // could be a NOSCRIPT; for a sync call, we can re-issue that without problem
+                return ExecuteSync(msg, ResultProcessor.LeaseScript);
+            }
+        }
+
         public RedisResult ScriptEvaluateReadOnly(string script, RedisKey[]? keys = null, RedisValue[]? values = null, CommandFlags flags = CommandFlags.None)
         {
             var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA_RO : RedisCommand.EVAL_RO;
@@ -2166,6 +2212,21 @@ namespace StackExchange.Redis
             {
                 // could be a NOSCRIPT; for a sync call, we can re-issue that without problem
                 return await ExecuteAsync(msg, ResultProcessor.ScriptResult, defaultValue: RedisResult.NullSingle).ForAwait();
+            }
+        }
+
+        public async Task<Lease<byte>?> ScriptEvaluateMemoryReadOnlyLeaseAsync(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None)
+        {
+            var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA_RO : RedisCommand.EVAL_RO;
+            var msg = new ScriptEvalMemoryMessage(Database, flags, command, script, args, argsDisposer);
+            try
+            {
+                return await ExecuteAsync(msg, ResultProcessor.LeaseScript).ForAwait();
+            }
+            catch (RedisServerException) when (msg.IsScriptUnavailable)
+            {
+                // could be a NOSCRIPT; for a sync call, we can re-issue that without problem
+                return await ExecuteAsync(msg, ResultProcessor.LeaseScript).ForAwait();
             }
         }
 
@@ -6113,12 +6174,12 @@ namespace StackExchange.Redis
             private readonly ReadOnlyMemory<RedisKeyOrValue> _args;
             private readonly int _keysCount;
             private readonly IScriptRequestDisposer? _argsDisposer;
-            private readonly string? script;
+            private readonly string _script;
             private byte[]? asciiHash;
             public ScriptEvalMemoryMessage(int db, CommandFlags flags, RedisCommand command, string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer)
                 : base(db, flags, command)
             {
-                this.script = script ?? throw new ArgumentNullException(nameof(script));
+                _script = script ?? throw new ArgumentNullException(nameof(script));
 
                 int keysCount = 0;
                 foreach (ref readonly var arg in args.Span)
@@ -6149,16 +6210,16 @@ namespace StackExchange.Redis
             public IEnumerable<Message> GetMessages(PhysicalConnection connection)
             {
                 PhysicalBridge? bridge;
-                if (script != null && (bridge = connection.BridgeCouldBeNull) != null
+                if ((bridge = connection.BridgeCouldBeNull) != null
                     && bridge.Multiplexer.CommandMap.IsAvailable(RedisCommand.SCRIPT)
                     && (Flags & CommandFlags.NoScriptCache) == 0)
                 {
                     // a script was provided (rather than a hash); check it is known and supported
-                    asciiHash = bridge.ServerEndPoint.GetScriptHash(script, command);
+                    asciiHash = bridge.ServerEndPoint.GetScriptHash(_script, command);
 
                     if (asciiHash == null)
                     {
-                        var msg = new ScriptLoadMessage(Flags, script);
+                        var msg = new ScriptLoadMessage(Flags, _script);
                         msg.SetInternalCall();
                         msg.SetSource(ResultProcessor.ScriptLoad, null);
                         yield return msg;
@@ -6177,7 +6238,7 @@ namespace StackExchange.Redis
                 else
                 {
                     writer.WriteHeader(RedisCommand.EVAL, 2 + _args.Length);
-                    writer.WriteBulkString(script);
+                    writer.WriteBulkString(_script);
                 }
 
                 writer.WriteBulkString(_keysCount);
