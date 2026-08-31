@@ -2024,6 +2024,11 @@ namespace StackExchange.Redis
             return ExecuteAsync(msg, ResultProcessor.ScriptResult, defaultValue: RedisResult.NullSingle);
         }
 
+        public RedisResult ScriptEvaluateMemory(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None)
+        {
+            throw new NotImplementedException();
+        }
+
         public RedisResult ScriptEvaluate(string script, RedisKey[]? keys = null, RedisValue[]? values = null, CommandFlags flags = CommandFlags.None)
         {
             var command = ResultProcessor.ScriptLoadProcessor.IsSHA1(script) ? RedisCommand.EVALSHA : RedisCommand.EVAL;
@@ -2053,6 +2058,11 @@ namespace StackExchange.Redis
         public RedisResult ScriptEvaluate(LoadedLuaScript script, object? parameters = null, CommandFlags flags = CommandFlags.None)
         {
             return script.Evaluate(this, parameters, withKeyPrefix: null, flags);
+        }
+
+        public Task<RedisResult> ScriptEvaluateMemoryAsync(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None)
+        {
+            throw new NotImplementedException();
         }
 
         public async Task<RedisResult> ScriptEvaluateAsync(string script, RedisKey[]? keys = null, RedisValue[]? values = null, CommandFlags flags = CommandFlags.None)

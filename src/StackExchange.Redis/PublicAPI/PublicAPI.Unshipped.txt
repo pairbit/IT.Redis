@@ -25,6 +25,8 @@ StackExchange.Redis.ClusterSlotAssignment.Slots.get -> StackExchange.Redis.SlotR
 StackExchange.Redis.ClusterSlotNode
 StackExchange.Redis.IScriptRequestDisposer
 StackExchange.Redis.IScriptRequestDisposer.Dispose(System.ReadOnlyMemory<StackExchange.Redis.RedisKeyOrValue> args) -> void
+StackExchange.Redis.IDatabase.ScriptEvaluateMemory(string! script, System.ReadOnlyMemory<StackExchange.Redis.RedisKeyOrValue> args, StackExchange.Redis.IScriptRequestDisposer? argsDisposer, StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None) -> StackExchange.Redis.RedisResult!
+StackExchange.Redis.IDatabaseAsync.ScriptEvaluateMemoryAsync(string! script, System.ReadOnlyMemory<StackExchange.Redis.RedisKeyOrValue> args, StackExchange.Redis.IScriptRequestDisposer? argsDisposer, StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None) -> System.Threading.Tasks.Task<StackExchange.Redis.RedisResult!>!
 StackExchange.Redis.RedisKeyOrValue
 StackExchange.Redis.RedisKeyOrValue.RedisKeyOrValue() -> void
 StackExchange.Redis.RedisKeyOrValue.RedisKeyOrValue(in StackExchange.Redis.RedisKey key) -> void

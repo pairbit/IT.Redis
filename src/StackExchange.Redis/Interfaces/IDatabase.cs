@@ -1631,6 +1631,21 @@ namespace StackExchange.Redis
         /// Execute a Lua script against the server.
         /// </summary>
         /// <param name="script">The script to execute.</param>
+        /// <param name="args">The args to execute against.</param>
+        /// <param name="argsDisposer">Disposing the args.</param>
+        /// <param name="flags">The flags to use for this operation.</param>
+        /// <returns>A dynamic representation of the script's result.</returns>
+        /// <remarks>
+        /// See
+        /// <seealso href="https://redis.io/commands/eval"/>,
+        /// <seealso href="https://redis.io/commands/evalsha"/>.
+        /// </remarks>
+        RedisResult ScriptEvaluateMemory(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None);
+
+        /// <summary>
+        /// Execute a Lua script against the server.
+        /// </summary>
+        /// <param name="script">The script to execute.</param>
         /// <param name="keys">The keys to execute against.</param>
         /// <param name="values">The values to execute against.</param>
         /// <param name="flags">The flags to use for this operation.</param>

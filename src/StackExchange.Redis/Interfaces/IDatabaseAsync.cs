@@ -402,6 +402,9 @@ namespace StackExchange.Redis
         /// <inheritdoc cref="IDatabase.Execute(string, ICollection{object}, CommandFlags)"/>
         Task<RedisResult> ExecuteAsync(string command, ICollection<object>? args, CommandFlags flags = CommandFlags.None);
 
+        /// <inheritdoc cref="IDatabase.ScriptEvaluateMemory(string, ReadOnlyMemory{RedisKeyOrValue}, IScriptRequestDisposer, CommandFlags)"/>
+        Task<RedisResult> ScriptEvaluateMemoryAsync(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None);
+
         /// <inheritdoc cref="IDatabase.ScriptEvaluate(string, RedisKey[], RedisValue[], CommandFlags)"/>
         Task<RedisResult> ScriptEvaluateAsync(string script, RedisKey[]? keys = null, RedisValue[]? values = null, CommandFlags flags = CommandFlags.None);
 
