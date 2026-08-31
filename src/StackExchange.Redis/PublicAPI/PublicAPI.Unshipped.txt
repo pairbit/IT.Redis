@@ -48,8 +48,8 @@ StackExchange.Redis.RedisKeyOrValue.Equals(StackExchange.Redis.RedisValue other)
 override StackExchange.Redis.RedisKeyOrValue.GetHashCode() -> int
 override StackExchange.Redis.RedisKeyOrValue.Equals(object? obj) -> bool
 override StackExchange.Redis.RedisKeyOrValue.ToString() -> string!
-static StackExchange.Redis.RedisKeyOrValue.NewKey(StackExchange.Redis.RedisKey key) -> StackExchange.Redis.RedisKeyOrValue
-static StackExchange.Redis.RedisKeyOrValue.NewValue(StackExchange.Redis.RedisValue value) -> StackExchange.Redis.RedisKeyOrValue
+static StackExchange.Redis.RedisKeyOrValue.FromKey(StackExchange.Redis.RedisKey key) -> StackExchange.Redis.RedisKeyOrValue
+static StackExchange.Redis.RedisKeyOrValue.FromValue(StackExchange.Redis.RedisValue value) -> StackExchange.Redis.RedisKeyOrValue
 static StackExchange.Redis.RedisKeyOrValue.operator ==(StackExchange.Redis.RedisKeyOrValue x, StackExchange.Redis.RedisKeyOrValue y) -> bool
 static StackExchange.Redis.RedisKeyOrValue.operator !=(StackExchange.Redis.RedisKeyOrValue x, StackExchange.Redis.RedisKeyOrValue y) -> bool
 static StackExchange.Redis.RedisKeyOrValue.implicit operator StackExchange.Redis.RedisKeyOrValue(StackExchange.Redis.RedisKey key) -> StackExchange.Redis.RedisKeyOrValue

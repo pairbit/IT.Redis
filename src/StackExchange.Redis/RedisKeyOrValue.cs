@@ -180,11 +180,11 @@ public readonly struct RedisKeyOrValue : IEquatable<RedisKeyOrValue>, IEquatable
 
     /// <summary>Create a new instance representing a key.</summary>
     /// <param name="key">key.</param>
-    public static RedisKeyOrValue NewKey(RedisKey key) => new RedisKeyOrValue(in key);
+    public static RedisKeyOrValue FromKey(RedisKey key) => new RedisKeyOrValue(in key);
 
     /// <summary>Create a new instance representing a value.</summary>
     /// <param name="value">value.</param>
-    public static RedisKeyOrValue NewValue(RedisValue value) => new RedisKeyOrValue(in value);
+    public static RedisKeyOrValue FromValue(RedisValue value) => new RedisKeyOrValue(in value);
 
     /// <summary>
     /// Compares two values for equality.
