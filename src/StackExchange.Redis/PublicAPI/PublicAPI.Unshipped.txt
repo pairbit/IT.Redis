@@ -32,6 +32,20 @@ StackExchange.Redis.RedisKeyOrValue.IsKey.get -> bool
 StackExchange.Redis.RedisKeyOrValue.Key.get -> StackExchange.Redis.RedisKey
 StackExchange.Redis.RedisKeyOrValue.IsValue.get -> bool
 StackExchange.Redis.RedisKeyOrValue.Value.get -> StackExchange.Redis.RedisValue
+StackExchange.Redis.RedisKeyOrValue.Equals(StackExchange.Redis.RedisKeyOrValue other) -> bool
+StackExchange.Redis.RedisKeyOrValue.Equals(StackExchange.Redis.RedisKey other) -> bool
+StackExchange.Redis.RedisKeyOrValue.Equals(StackExchange.Redis.RedisValue other) -> bool
+override StackExchange.Redis.RedisKeyOrValue.GetHashCode() -> int
+override StackExchange.Redis.RedisKeyOrValue.Equals(object? obj) -> bool
+override StackExchange.Redis.RedisKeyOrValue.ToString() -> string!
+static StackExchange.Redis.RedisKeyOrValue.NewKey(StackExchange.Redis.RedisKey key) -> StackExchange.Redis.RedisKeyOrValue
+static StackExchange.Redis.RedisKeyOrValue.NewValue(StackExchange.Redis.RedisValue value) -> StackExchange.Redis.RedisKeyOrValue
+static StackExchange.Redis.RedisKeyOrValue.operator ==(StackExchange.Redis.RedisKeyOrValue x, StackExchange.Redis.RedisKeyOrValue y) -> bool
+static StackExchange.Redis.RedisKeyOrValue.operator !=(StackExchange.Redis.RedisKeyOrValue x, StackExchange.Redis.RedisKeyOrValue y) -> bool
+static StackExchange.Redis.RedisKeyOrValue.implicit operator StackExchange.Redis.RedisKeyOrValue(StackExchange.Redis.RedisKey key) -> StackExchange.Redis.RedisKeyOrValue
+static StackExchange.Redis.RedisKeyOrValue.implicit operator StackExchange.Redis.RedisKeyOrValue(StackExchange.Redis.RedisValue value) -> StackExchange.Redis.RedisKeyOrValue
+static StackExchange.Redis.RedisKeyOrValue.explicit operator StackExchange.Redis.RedisKey(StackExchange.Redis.RedisKeyOrValue value) -> StackExchange.Redis.RedisKey
+static StackExchange.Redis.RedisKeyOrValue.explicit operator StackExchange.Redis.RedisValue(StackExchange.Redis.RedisKeyOrValue value) -> StackExchange.Redis.RedisValue
 StackExchange.Redis.ClusterSlotNode.AnnouncedEndpoint.get -> string?
 StackExchange.Redis.ClusterSlotNode.EndPoint.get -> System.Net.EndPoint?
 StackExchange.Redis.ClusterSlotNode.Hostname.get -> string?
