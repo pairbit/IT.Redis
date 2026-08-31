@@ -161,7 +161,7 @@ public readonly struct RedisKeyOrValue : IEquatable<RedisKeyOrValue>, IEquatable
     {
         StorageType.Key => UnsafeKey.ToString(),
         StorageType.Value => UnsafeValue.ToString(),
-        _ => "[null]",
+        _ => "(null)",
     };
 
     /// <inheritdoc/>
@@ -210,9 +210,23 @@ public readonly struct RedisKeyOrValue : IEquatable<RedisKeyOrValue>, IEquatable
 
     /// <summary>Obtains the underlying payload as a key.</summary>
     /// <param name="value">value.</param>
-    public static explicit operator RedisKey(RedisKeyOrValue value) => value.Key;
+    public static explicit operator RedisKey(RedisKeyOrValue value)
+    {
+        if (value.Type != StorageType.Key)
+            ThrowInvalidCast(value.Type);
+
+        return value.UnsafeKey;
+    }
 
     /// <summary>Obtains the underlying payload as a value.</summary>
     /// <param name="value">value.</param>
-    public static explicit operator RedisValue(RedisKeyOrValue value) => value.Value;
+    public static explicit operator RedisValue(RedisKeyOrValue value)
+    {
+        if (value.Type != StorageType.Value)
+            ThrowInvalidCast(value.Type);
+
+        return value.UnsafeValue;
+    }
+
+    private static void ThrowInvalidCast(StorageType type) => throw new InvalidCastException($"Operation not valid on {type} value.");
 }
