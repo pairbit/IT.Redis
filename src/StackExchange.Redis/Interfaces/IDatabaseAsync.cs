@@ -418,6 +418,9 @@ namespace StackExchange.Redis
         /// <inheritdoc cref="IDatabase.ScriptEvaluate(LoadedLuaScript, object?, CommandFlags)"/>
         Task<RedisResult> ScriptEvaluateAsync(LoadedLuaScript script, object? parameters = null, CommandFlags flags = CommandFlags.None);
 
+        /// <inheritdoc cref="IDatabase.ScriptEvaluateMemoryReadOnly(string, ReadOnlyMemory{RedisKeyOrValue}, IScriptRequestDisposer, CommandFlags)"/>
+        Task<RedisResult> ScriptEvaluateMemoryReadOnlyAsync(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None);
+
         /// <inheritdoc cref="IDatabase.ScriptEvaluateReadOnly(string, RedisKey[], RedisValue[], CommandFlags)"/>
         Task<RedisResult> ScriptEvaluateReadOnlyAsync(string script, RedisKey[]? keys = null, RedisValue[]? values = null, CommandFlags flags = CommandFlags.None);
 

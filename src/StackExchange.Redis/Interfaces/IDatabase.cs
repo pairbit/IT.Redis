@@ -1699,6 +1699,21 @@ namespace StackExchange.Redis
         /// Read-only variant of the EVAL command that cannot execute commands that modify data, Execute a Lua script against the server.
         /// </summary>
         /// <param name="script">The script to execute.</param>
+        /// <param name="args">The args to execute against.</param>
+        /// <param name="argsDisposer">Disposing the args.</param>
+        /// <param name="flags">The flags to use for this operation.</param>
+        /// <returns>A dynamic representation of the script's result.</returns>
+        /// <remarks>
+        /// See
+        /// <seealso href="https://redis.io/commands/eval_ro"/>,
+        /// <seealso href="https://redis.io/commands/evalsha_ro"/>.
+        /// </remarks>
+        RedisResult ScriptEvaluateMemoryReadOnly(string script, ReadOnlyMemory<RedisKeyOrValue> args, IScriptRequestDisposer? argsDisposer, CommandFlags flags = CommandFlags.None);
+
+        /// <summary>
+        /// Read-only variant of the EVAL command that cannot execute commands that modify data, Execute a Lua script against the server.
+        /// </summary>
+        /// <param name="script">The script to execute.</param>
         /// <param name="keys">The keys to execute against.</param>
         /// <param name="values">The values to execute against.</param>
         /// <param name="flags">The flags to use for this operation.</param>
