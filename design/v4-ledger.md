@@ -2,9 +2,11 @@
 
 The current list of what is pending on `v4` and what is waiting on a decision. **Keep it short:** when an
 item closes, delete it here and let the commit message hold the story. History and reasoning live in
-`v4-alpha-plan.md` (how the old core was retired) and `message-core-replacement.md` (why).
+`v4-alpha-plan.md` (how the old core was retired) and `message-core-replacement.md` (why); closed ledger
+entries live in this file's git history. Behaviour differences v3 → v4 that belong in release notes are
+catalogued in `notes/v3-v4-behaviour-audit.md`.
 
-Last updated: 2026-10-13.
+Last updated: 2026-11-17.
 
 ## Decisions waiting on Marc
 
@@ -12,446 +14,193 @@ Each has a default the work proceeds on until answered.
 
 | # | question | default meanwhile |
 |---|---|---|
-| D3 | **Alpha cadence.** Latest is 4.0.127-alpha, cut 2026-10-12 (GitHub Release on `v4` runs `release.yml`). | cut when Marc says; CI green first |
+| D3 | **Alpha cadence.** Latest is 4.0.165-alpha, cut 2026-11-13 (GitHub Release on `v4` runs `release.yml`). | cut when Marc says; CI green first |
 | D4 | **Post the v4-port findings to PR #3251?** Drafted (spin-before-park +2.6% on `incr-conc64` in #3251's own reader; read-size hint is a hypothesis; drain-per-wake does not pay). Outward-facing. | not posted |
-| D5 | **SER014 batch/transaction, unsettled parts:** conditions borrow the shipped `Condition` type (new spelling later?); whether `RespBatch`/`RespTransaction` stay structs. | as shipped in 2ca83a9d |
 
-Closed on `v4` itself: **D1** - #3251's intent is ported and the default async reader (3cc99f62, then 41afb04b
-and ff5df601), with `SingleReadLoop` / `SEREDIS_SINGLEREADLOOP` as the opt-out; **D2** - option (b), dedicated
-connections connect and run TLS synchronously (dbb38f88).
-
-Closed by the 3.4.0 merge (2026-10-09), because `main` decided them: **D6** - duplicate event ids renumbered on `main`
-(#3266; 124-127 are now main's shipped ids, and v4's colliding v4-only events moved to 128-131); **D7** - RESP3
-pub/sub gets a dedicated connection by default, sharing is opt-in via `SharedSubscriptionConnection` (#3264).
+Closed since the last update: **D5** — SER014 batch/transaction shipped as-is (2ca83a9d) and has not needed
+revisiting: conditions stay on the shipped `Condition` type, `RespBatch`/`RespTransaction` stay structs.
 
 ## Pending work (no decision needed)
 
-- **Cache performance (2026-10-10) - shipped, and the list of ideas still to explore.** The design as built, with its reasons and rejections: `design/client-side-cache.md`. Shipped: c5370268
-  (routing to answer a constant on every cached read: the ~30% RespFest regression), 04ef29d9 + 1bd841e6 (replies
-  in GC-owned slabs: no refcount CAS per hit, no mid-life reply arrays; 1 hot key at 24 threads 11.5 -> 149 M/s),
-  0023c9e6 (`CacheClock`), a5af2dec (eviction-queue leak; lazy in-flight completion), a7325526
-  (`CacheOptions.Admission`, TinyLFU doorkeeper; all-miss 307k -> 593k ops/s, GC pause 29% -> 4%). Single-thread hit
-  134 -> 114ns. Tools: `CacheHitSendBenchmarks` (`--inProcess`: the `.claude/worktrees` copies break BDN's
-  out-of-process build), `cache-scaling [s] host:port` (hits), `cache-scaling miss 8 host:port [nocache|admit]`,
-  `dotnet-trace` + the alloc-by-type summariser recipe in memory. **To explore, roughly in order:**
-  - [x] Charge a per-entry overhead to `MaxBytes` (256 bytes + the request's length): before, a million tiny
-    replies (counts) reported ~5 MB while holding ~350 MB of entry objects.
-  - [x] Cache key bytes into the slab beside the reply: hits ~+10% at 100k keys / 24 threads (locality: the
-    key a lookup finds sits beside its reply); misses neutral - one object fewer is lost in the remaining GC cost.
-  - [x] Fold the single-dependency case into `Entry`: one dependent load fewer per hit (+3-5% at 100k keys / 24
-    threads), and the fill's array now dies young (all-miss GC pause ~25% -> ~19%).
-  - [x] A skewed (Zipf) workload in the harness (cc95aeef): `OnRepeatedMiss` wins outright - hit rate 72.4% ->
-    76.6%, 1.06M -> 1.6M ops/s, CPU/op 9.8 -> 7.1us. **Decided (Marc, 2026-10-10): the default**, as
-    `CacheAdmission.Default` resolving to it, documented.
-  - [x] Propose a skewed mixed scenario for RespFest: done on their side (`cache-zipf-seq`/`-conc64`, efc2419).
-  - [x] Doorkeeper sizing: from `MaxBytes / EntryOverheadBytes` rather than assuming ~1 KiB per entry.
-  - [x] **The default behaved as `OnFirstMiss` in RespFest** (Zipf 72.1% vs 72.5%; all-miss identical). Not
-    sizing: the byte hash (`RedisValue.GetHashCode(span)`, behind `RespRequest`, `RedisKey`, `RedisChannel`,
-    `RespKeyTable`) gave 200,000 framed `GET rf:cbig:{i}` requests ~42,000 hashes, and the doorkeeper took its probe
-    from the low bits of a bare multiply, landing them on ~4,500 bits: every first miss read as a repeat. The
-    harness used zero-padded keys, which hashed fine - the lesson is to bench on more than one key shape. Fixed:
-    a word-at-a-time multiply + MurmurHash3 finalizer (ideal distribution over 12 key shapes, same cost on a short
-    request), and the doorkeeper mixes before probing. On RespFest's keys: Zipf 72.4% -> 75.1%, all-miss 324k ->
-    610k ops/s. Hit path: the stub 1-key loop moves 72 -> 70-97ns between builds of ANY change to that function
-    (a variant returning the old value measured the same), so code layout, not the hash; 100k keys +4-7ns.
-  - [x] **After that fix, the default still matched `OnFirstMiss` at 64 callers** (72.0-72.7% vs 75.8% at 1 caller).
-    RespFest's runners replay one 1M-draw key table, 3-30x over a cell; with a 16M table the gain returned, so they
-    called it their fault (2026-10-11). It was half ours: the replay exposed a doorkeeper defect. It aged only by
-    *first sightings*, and the table holds ~120,000 distinct keys against a 131,072 window - once each had missed
-    once nothing new arrived, the filter never cleared, and every miss read as a repeat (modelled: 0 refusals). Any
-    keyspace smaller than the window does the same. Fixed: every miss ages it, as TinyLFU ages by samples.
-    `design/admitsim.py` (a model of doorkeeper + slabs + budget; imports RespFest's `harness.keyseq`): 1M table at
-    64 callers 72.5% -> 76.1%; independent draws 75.3% -> 76.1% (a 64k window gives 76.7%, not taken: tuning).
-    Measured, harness now drawing as it goes (it had replayed a 4M table): default 76.4%/76.0% at 1/64 callers vs
-    72.4%/72.5% `OnFirstMiss`, 1.45M vs 1.07M ops/s at 64; all-miss 596k ops/s (was 593k). Dropped: coalescing
-    refused misses, the reproduction-with-counters run, the slowed-64 and 8-caller cells.
-  - [x] RespFest `--patch` run on 4.0.124, BOTH tables (2026-10-12): identical. Default 75.9-76.0% (conc64 2.65M /
-    2.70M ops/s; lease 3.13M / 3.18M), `OnFirstMiss` 72.3-72.5% (2.10M / 2.29M).
-    Unconfirmed, low priority: Their 64-caller sad-path 4-5% hits are expected to stay: a cyclic walk is a bounded keyspace, and the
-    doorkeeper's lower churn lets a few entries live until their key returns (the harness's own all-miss cell, a
-    cycle of 3,125 keys per caller: 12.5% at 64 callers, 0.0% at 1).
-  - [ ] The gap to Lettuce's 79% (check which cache its runner uses; Caffeine's W-TinyLFU compares the candidate's
-    frequency with the victim's). Model before code: second-chance eviction (below) and frequency-vs-victim
-    admission (a sketch: a write per hit, against a hit path that writes nothing) in `admitsim.py`, on standard
-    traces (ARC/LIRS, Caffeine's simulator) as well as Zipf - not fitted to one benchmark. Under ~1 point: close.
-  - [ ] Second chance at slab eviction: a write-once "touched" flag per entry; touched entries copied forward rather
-    than evicted with their slab. Only if the Zipf workload shows hot keys churning out.
-  - [ ] The cached miss sends untyped and parses afterwards, where an uncached send parses typed on the reader.
-  - [ ] `RespMultiplexerExecutor.CanWritePreamble` still resolves a route (server selection + the endpoint lock) on
-    every paired send. Unlike `Transactional`/`Accumulates`/`CanCancel` (made constant in c5370268, 40ca69ee) the
-    answer is route-dependent - a database view (`RespDatabaseExecutor`) does not override it, so says false, where
-    an endpoint says true - though the executor is bound to one database, so it is probably fixed per instance.
-    Check, then compute it once.
-  - [ ] `RespKeyTable` nodes: check whether a key's node outlives every entry that depended on it (growth with the
-    keyspace, not the cache).
-  - [ ] Slab recycling via per-thread reader counters - only if large-object churn (gen2) shows up as a cost.
-  - [ ] The interpolated builder: ~26ns over a 4ns floor, plus 10-15ns on every group method from inline-budget
-    exhaustion (6548bffe). Draft parked as `design/parked/builder-inlining.patch` (`git apply` it) (forced inlining of
-    `CommitBulk`/`CountArguments`, hot/cold `FoldSlot`); unmeasured.
-  Rejected, with reasons in the commits: per-entry striped refcounts (~150 MB of padded counters), pinned-object heap
-  for entries (no better), finalizer-driven slab recycling (interior pointers outlive the wrapper; finalizable
-  objects are mid-life by construction).
-- **Watch: `GetServerTestsCluster.GetServerByKeyMemoization` (RESP3) on Windows net481** - not seen in the 60 CI
-  runs since 2026-10-09; drop it if that holds. Originally 2 of the first 3 `v4` runs, each after a cluster connect that waited the full 20s at the very start of the net481 run (three
-  cluster connects stalled together). Suspected lost wake-up, fixed speculatively in d45eadf7 (announce
-  "connected" only after the connection is published); not reproduced locally. Tests now print the connection
-  log, with thread-pool stats, for any connect that uses half its timeout - read it if it recurs.
+- **Windows CI is red at the branch head: `ExceptionFactoryTests.ServerTakesPrecendenceOverSnapshot` (RESP2)**
+  failed on both `v4` push runs since the 3.4.31 merge (c76d4e6b and 0d18c571, both 2026-11-13): expected
+  "The connection to 127.0.0.1:6379 was closed", actual "Aborting (AllowConnect: False)" out of
+  `RespEndpointExecutor.ConnectAsync` via `RespConnectionManager.DialEndpointSoon`. 2 of 2 on push where the
+  same commits' PR runs were green, so it may be ordering/environment — but it is deterministic enough to
+  diagnose before the next alpha. (The 0d18c571 run also hit two known flakes, listed under Watch.) Ubuntu
+  is green on both runs.
 - **Absorb `main` by merging**, little and often; resolve each conflict by re-expressing the change in v4
-  terms and say how in the merge message. Drift check: `git rev-list --count v4..origin/main`. The final
-  landing on `main` must be a real merge, never a squash.
+  terms and say how in the merge message. **The drift-check command is now misleading:** #3298 and #3355 were
+  intent-ports squash-merged onto v4, so ancestry is not joined and `git rev-list --count v4..origin/main`
+  overstates (it answers 15 today). Measure drift from the newest `main` commit the last port covered
+  (#3355 covered through #3352). True drift right now: **one commit** — ca51eb6a (#3333, prefer the announce
+  hostname when dialing a cluster node on reconnect, 2026-11-16), not yet ported. The final landing on
+  `main` must be a real merge, never a squash.
+- **Cache performance — ideas still to explore** (the design as built, with reasons and rejections:
+  `design/client-side-cache.md`; tools: `CacheHitSendBenchmarks` with `--inProcess`, `cache-scaling`,
+  `design/admitsim.py` — a model of doorkeeper + slabs + budget that imports RespFest's `harness.keyseq`).
+  Roughly in order:
+  - [ ] The gap to Lettuce's 79% hit rate (check which cache its runner uses; Caffeine's W-TinyLFU compares
+    the candidate's frequency with the victim's). Model before code: second-chance eviction and
+    frequency-vs-victim admission in `admitsim.py`, on standard traces (ARC/LIRS, Caffeine's simulator) as
+    well as Zipf — not fitted to one benchmark. Current default measures 75.9–76.1%; under ~1 point: close.
+  - [ ] Second chance at slab eviction: a write-once "touched" flag per entry; touched entries copied forward
+    rather than evicted with their slab. Only if the Zipf workload shows hot keys churning out.
+  - [ ] The cached miss sends untyped and parses afterwards, where an uncached send parses typed on the reader.
+  - [ ] `RespMultiplexerExecutor.CanWritePreamble` still resolves a route (server selection + the endpoint
+    lock) on every paired send; the executor is bound to one database, so it is probably fixed per instance.
+    Check, then compute it once.
+  - [ ] `RespKeyTable` nodes: check whether a key's node outlives every entry that depended on it (growth
+    with the keyspace, not the cache).
+  - [ ] Slab recycling via per-thread reader counters — only if large-object churn (gen2) shows up as a cost.
+  - [ ] The interpolated builder: ~26ns over a 4ns floor, plus 10–15ns on every group method from
+    inline-budget exhaustion (6548bffe). Draft parked as `design/parked/builder-inlining.patch`
+    (`git apply` it); unmeasured.
+
+  Rejected, with reasons in the commits: per-entry striped refcounts (~150 MB of padded counters),
+  pinned-object heap for entries (no better), finalizer-driven slab recycling (interior pointers outlive
+  the wrapper; finalizable objects are mid-life by construction).
+- **CancellationToken dropped before `SendAsync`:** geo `SearchCore` passes `default` where the caller's
+  token belongs. #3356 found and fixed the same pattern in `RangeByScoreCore` and `CombineCore`; sweep the
+  remaining internal cores for it.
+- **The core has no `Proxy.Twemproxy` handling** — stated in the code as "a real gap". Decide: port it, or
+  4.0 ships without proxy support and the option refuses loudly.
+- **Test-coverage debts:** nine regression pins (born from production incidents) that died with the old core
+  and were not re-pinned end-to-end — #2919 teardown misroute, #3282 mid-batch fault injection, cluster
+  tie-breaker probe suppression, `RequestBufferPool` accounting over live traffic, and five more. Behaviour
+  is believed fine; each is a candidate ticket. The list with detail: `notes/v3-v4-behaviour-audit.md`.
 - **Two-core leftovers:**
-  - `Subscription._subscribed` / `IsSubscribed` / `AnySubscribed` now mean only "something
-    subscribed this"; collapsing them changes the never-sent case - look, don't delete.
-  - ~30 `ConnectionsIfCreated?.` null-tolerances; `ServerEndPoint.IsConnecting => false`.
+  - `Subscription._subscribed` / `IsSubscribed` / `AnySubscribed` now mean only "something subscribed
+    this"; collapsing them changes the never-sent case — look, don't delete.
+  - ~24 `ConnectionsIfCreated?.` null-tolerances; `ServerEndPoint.IsConnecting => false`.
   - Topology flows both ways between `RespTopology` and `ServerSelectionStrategy` ("phase D").
 - **Subscription re-aim waits for its in-flight send to fail** (instant on Linux, ~2s on Windows, a connect
-  timeout for a dropped SYN). Fixing it means de-duplicating a subscription that lands on two nodes. Not urgent.
-- **The "~5s with nothing inbound" stall: root cause found and fixed** (the commit after 7aa7f818); CI since shows
-  only the `RespCacheChurnTests` shape below.
-  A full dump of a stuck run showed the connection's read loop mid-execution on a thread running TEST code: the
-  reader completed an operation INLINE, the continuation ran up into a test's `await`, and the test then made a
-  synchronous call whose reply only that reader could deliver. Inline completion leaked from the two deliberate
-  inline paths (the sync pump's sink, `TrySetCanceledInline`) through `ManualResetValueTaskSourceCore`'s
-  `RunContinuationsAsynchronously`, which survives a reset: across lives (the inline continuation recycled the
-  instance before the `finally` restored it) and within one (TrySetCanceledInline flipped it before claiming).
-  12/12 local full runs clean afterwards, against ~1 in 5-7 stalling before; no 5s timeouts at all.
-- **Fixed 2026-10-09:** `ReadOnlyLeaseTests.PrimitiveElementsAreNotClearedOnReturn` (Windows CI twice) asserted
-  on whatever the process-shared `ArrayPool` handed back; it now asserts only when it is the same array.
-- **Watch: one "nothing inbound" timeout on CI after the stall fix** (2026-10-09, Ubuntu, PR run of 804da1c9; the
-  push run of the same commit passed): `RespCacheChurnTests.ChurnDoesNotDisableTheCache("scoped", 16 callers)`,
-  `Timeout awaiting response (outbound=12KiB, inbound=0KiB, 5915ms)`, 16 SETs in flight. Purely async test, so not
-  the old sync-on-reader shape. Locally: 25 runs of the class and 5 net10 full suites, all clean, no timeouts. If it
-  recurs, take a dump mid-stall (the old fix was found that way) rather than retrying. **Recurred:** 2026-10-10
-  (6ab36833, Ubuntu, `"benchmark"` via context, 12s) and 2026-10-12 (4c206f39, Windows net10.0, `"scoped"`, 6s).
-- **Watch: `BacklogTests.TotalOutstandingIncludesBacklogQueue` is intermittent, and was before today** (2026-10-09):
-  three pings queued after `SimulateConnectionFailure` with `AllowConnect = false` sometimes show
-  `PendingUnsentItems == 0`. Looked like a regression (2 of 3 alone at the head), but a bisect plus re-runs put the
-  morning's 286170a8 at 1 of 8 as well, the same rate as the head - so pre-existing and environment-sensitive.
-  Not investigated further; first suspect is the pings completing (or faulting) before the counters are read.
-  Again on 5d4a4981 (2026-10-12, Ubuntu, same message).
-- **Known flakes** (beyond the stall above): `SentinelTests.AbortOnConnectFailFalseRecoversOnceSentinelsAppear` (RESP2, Ubuntu: "did not recover once the sentinel became reachable", a5af2dec 2026-10-10 and ea92c293 2026-10-12; unrelated changes both times); `TouchIdleTime` (6381), `RespAggregateTiming`, `RespAggregateProtoTests.ADeferredWalkNeedsNoStorageAtAll` (net8, full suite only; per-thread allocation measure); `ClusterTopologyUnitTests.SlotLessNodesAreKnownButNotConnected` (net8 full suite once, 2026-10-09; 3/3 alone);
-  `RedisBatchTests.AWatchConflictIsDistinctFromAFailedCondition` timed out once (fake transport) on a
-  heavily loaded machine, 20/20 since.
-  CI once each, not investigated (2026-10-10 to 10-12): `ConnectCustomConfigTests.HeartbeatConsistencyCheckPingsAsync`
-  (net481), `RespSurfaceTests.EachPingMeasureGetsItsOwnClock` (net481),
-  `DedicatedThreadsTests.WithTheFlag_PubSubStaysOnTheThreadPool(shared: true)` (net481),
-  `RespTrackingTests.AThirdPartyWriteInvalidatesWhatWeCached` + `...TheKeyBytesTheServerSendsAreTheOnesWeRecorded`
-  (net481, same run), `Resp3DowngradeTests.SubscribeQueuedBeforeDowngradeDoesNotPoisonInteractive` (net10.0, 11s),
-  `ClusterShardedTests.SubscribeToWrongServerAsync` (Ubuntu). And one with a known cause, in the TEST:
-  `CancellationTests.WithCancellation_CancelledToken_ThrowsOperationCanceledException` ("no exception thrown",
-  Ubuntu, cc327de8) - `Task.WaitAsync(token)` returns an already-completed task as-is, and with inline sends a
-  loopback SET can complete before `WaitAsync` looks; it should cancel through the API's own token instead.
-  Pub/sub under full-suite load, each once and each clean in isolation: `MultiGroupTests...PubSubOrderedRouted`
-  and `...PubSubRouted` (RESP3), `PubSubKeyNotificationTestsCluster.KeyNotification_CanObserveSimple_ViaQueue`.
-  `PubSubRouted` and `KeyNotification_CanObserveSimple_ViaQueue` have each now failed in two full runs (RESP2
-  and RESP3), always clean in isolation and in the run after; the leading suspect if a pattern holds.
-  (`RespHashImportProbeTests.AConnectionLocalPreambleIsTheScriptSeam...` kept recurring after that fix - CI
-  once, local net8 twice - and the second cause was isolation: the probe ran on the SHARED multiplexer, so any
-  concurrent test's batch or transaction holding the write slot sent the next pair sequential. Now
-  `Create(shared: false)`, 2026-10-09. The first cause was a startup race in the TEST, also
-  fixed: a pair sent while the post-connect drain holds the write slot goes sequential, which sends the
-  PREPARE without asking the gate; the connection-local gate rightly does not claim on being told, so the
-  next pair prepared again. Product behaviour is by design: at worst one redundant, idempotent PREPARE per
-  field-set per connection, only in that window.)
+  timeout for a dropped SYN). Fixing it means de-duplicating a subscription that lands on two nodes — the
+  problem PR #3353 addresses on `main` (overlapping subscription restores cannot register on two servers);
+  when that lands, port the approach rather than inventing a second one. Not urgent.
+- **An abandoned connect (timeout) keeps its socket in SYN-SENT until the OS gives up** — default mode calls
+  `ConnectAsync` without the token (5 blackholed attempts left 5 sockets; dedicated mode, which connects
+  synchronously with cancellation disposing the socket, leaves none).
+- **Prose still says "the new core".** The rename pass (a1673a96) renamed types and members only; ~35 files
+  across `src/` and `docs/` still say "the new core" / "old core" where there is now one. A wording pass to
+  "the connection manager" (or just "the core") — noisy, so its own commit.
+- **`MaintenanceOptInServerTests.SequenceIdsAdvanceAndCanBeRepeated` fails when its class runs alone** (5 of
+  5; usually passes in the full suite): `SendShardNotification` reaches 0 connections where 1 opted in — the
+  opt-in has not landed at the fake server when the notification is sent. A test-ordering dependence; look
+  at what `OptInAsync` awaits.
+- **`CancellationTests.WithCancellation_CancelledToken_ThrowsOperationCanceledException`** — a race in the
+  test itself: `Task.WaitAsync(token)` returns an already-completed task as-is, and with inline sends a
+  loopback SET can complete before `WaitAsync` looks. It should cancel through the API's own token.
+
+### Watch (flakes, not yet reproducible)
+
+- **"Nothing inbound" timeouts in `RespCacheChurnTests`** — 2026-10-09, 2026-10-10 (Ubuntu) and 2026-10-12
+  (Windows net10.0), purely async tests, clean locally over 25 class runs + 5 full suites. If it recurs,
+  take a dump mid-stall (the 2026-10-09 inline-completion stall was found that way) rather than retrying.
+- **`BacklogTests.TotalOutstandingIncludesBacklogQueue`** — intermittent and pre-existing (bisect put an
+  unrelated commit at the same failure rate as the head). First suspect: the pings completing or faulting
+  before the counters are read.
+- **`QueuedResultTests.RetryTransactionFireAndForgetSharesOneCompletedTask`** — 2026-10-08 (net8.0, full
+  suite) and again 2026-11-13 (Windows push run of 0d18c571, RESP2, `Assert.True` failure). It asserts the
+  per-command tasks are settled when `ExecuteAsync` returns, which the retrying transaction executor
+  guarantees by awaiting them; two sightings now, so worth a look at what the assertion saw.
+- **net8.0 cluster tests timing out at 10s under the full suite** (`DisabledCommandsStillConnectCluster`
+  and friends). Seen 2 of 7 full runs after the per-thread operation cache (03bbb05a), 0 of 3 before;
+  0 of 16 alone. If it recurs, compare with and without that commit first.
+- **Known flakes:** `SentinelTests.AbortOnConnectFailFalseRecoversOnceSentinelsAppear` (Ubuntu),
+  `TouchIdleTime` (6381), `RespAggregateTiming`, `ADeferredWalkNeedsNoStorageAtAll` (net8, full suite only),
+  `ADeferredWalkAgainstMaterialiseThenRead` (again 2026-11-13, Windows), `SlotLessNodesAreKnownButNotConnected`
+  (net8 full suite). Pub/sub under full-suite load: `PubSubRouted` and
+  `KeyNotification_CanObserveSimple_ViaQueue` have each failed in two full runs (RESP2 and RESP3), always
+  clean in isolation — the leading suspect if a pattern holds.
+- Dropped from Watch: `GetServerByKeyMemoization` — not seen since the speculative fix d45eadf7
+  (2026-10-09), across every CI run since.
 
 ## Backlog (after the alpha)
 
-- **Client-side cache across a geo/active-active failover** - closed 2026-10-12, except one run. Read-your-writes
-  on failback: every member's cache is now stamped by our own writes (`RespClientCache.SetPeers`); flushing on
-  each switch was rejected, since equal-weight groups switch on latency. A silent inactive member: already
-  covered - group members force `HeartbeatConsistencyChecks`, so each endpoint is pinged every heartbeat and a
-  half-open connection trips the dead-socket rule, flushing that member's cache. Design in
-  `client-side-cache.md` §6. Tests: `GroupCacheTests` (in-process; fail without the fix).
-  - [ ] **Run `ActiveActiveCacheScenarioTests`** against the Active-Active environment: written and compiled,
-    never executed (no fault-injector environment here). It also asserts what the in-process servers cannot - that
-    an inactive member's cache hears a write replicated from elsewhere.
-
-- **Alternative client-side-cache invalidation sources, and opt-in/out.** Today invalidation comes only from
-  `CLIENT TRACKING` (`CacheTrackingMode`: Default -> BCAST, or per-key tracking) and the cache is opt-in per multiplexer
-  (`ConfigurationOptions.ClientCache` is null by default; `CacheOptions.Enabled = true` applies once one is given). Add policies for deployments where tracking is unavailable or unwanted
-  (proxies, older servers, some managed offerings): **keyspace notifications** (`__keyspace@<db>__:*`, which
-  needs `notify-keyspace-events` configured server-side and carries no RESP3 requirement) and **explicit
-  pub/sub** (an application-defined invalidation channel the writer publishes to). Settle the rest of the opt-in/out
-  story at the same time: how a caller opts out per multiplexer and per
-  command, and what the cache does when the chosen source is not available (refuse loudly, as RESP2 + cache
-  does today, versus degrade to no caching).
-
-- **Client-side cache: public counters / metrics** - hits, misses, stored, refused (admission), invalidations,
-  stale-served. They exist internally (`RespClientCache.Stored`, `Count`, ...; tests read them) but nothing public:
-  pick a shape (`System.Diagnostics.Metrics` instruments, a snapshot struct, or both).
-
-- **Non-nullable `AppendFormatted(long)` / `(double)` overloads** on `RespRequestBuilder`, beside today's
-  `long?`/`double?` (asked for by the NRedisStack port). Needs an overload-resolution sweep across the interpolated
-  call sites before adding.
-
-- **.NET 11 TFM:** try runtime async; prototype caller-driven TLS (`TlsBufferSession`); run the suite and RespFest on
-  11 early.
-  **The RC2 thread-pool regression (dotnet/runtime#135855) lands mostly on our own hops** (2026-10-15, 64 callers,
-  GET 1 KiB, local Redis, client on 12 CPUs, median of 2): v4 default 762k -> 532k ops/s (-30%) at 5us caller work,
-  but `SEREDIS_DEDICATEDTHREADS=1` on RC2 gives 758k (.NET 10 dedicated: 798k), and 1.17M at no work (.NET 10
-  default 963k). `SEREDIS_SINGLEREADLOOP=1` alone: -17% on RC2 - the filler->parser hop is a large share. The
-  socket/reader hops are ~0.1 pool items per op but gate every caller on the connection. The Redis-free repro
-  (`--io dedicated`, `--complete ownpool|inline`, scratch patch) splits its -36% about 1/3 IO hop, 2/3 caller
-  continuations; a naive own pool for continuations is 25% slower than .NET 10's pool, inline is serial (82k).
-  Next: dedicated reader (+writer) by default on net11+, with a cap for wide clusters; 1 caller costs -7% ops but
-  less CPU per op.
-- **Unobserved faults on the new surface** (the transitional `Task` surface was fixed in the commit that removed
-  this item's first half: it now bridges through its own task and marks a fault observed). A `ValueTask` over the
-  pooled operation has no `Task` and no finalizer, but a non-pooled `async ValueTask` that completes asynchronously
-  is `Task`-backed - every one down-level, and 10 of 13 on net6+ - so a faulted one that the caller drops can still
+- **Run `ActiveActiveCacheScenarioTests`** against a real Active-Active deployment: written and compiled,
+  never executed (needs the fault-injector environment). It also asserts what the in-process servers cannot —
+  that an inactive member's cache hears a write replicated from elsewhere.
+- **Alternative client-side-cache invalidation sources.** The opt-in/out story is now largely settled:
+  per-multiplexer via `ConfigurationOptions.ClientCache` (null by default), per-command via the serve/store
+  `CommandFlags` and `CachePolicy` (#3354, which also added `CachePolicy.Storage = External` for layered
+  caches such as HybridCache). What remains: invalidation sources for deployments without usable
+  `CLIENT TRACKING` (proxies, older servers, some managed offerings) — **keyspace notifications**
+  (`__keyspace@<db>__:*`; needs `notify-keyspace-events` server-side, no RESP3 requirement) and **explicit
+  pub/sub** (an application-defined channel the writer publishes to) — and the policy when the chosen
+  source is unavailable: refuse loudly, as RESP2 + cache does today, versus degrade to no caching.
+- **Client-side cache: public counters / metrics** — hits, misses, stored, refused (admission),
+  invalidations, stale-served. They exist internally (`RespClientCache.Stored`, `Count`, …; tests read
+  them) but nothing public: pick a shape (`System.Diagnostics.Metrics` instruments, a snapshot struct, or
+  both).
+- **Operation pool size at batch depth, then buffer packing.** The 2026-10-07 batch profile (SADD, 50
+  callers × 100 per batch): v4 is round-trip bound, command assembly is 0.9–1.5% of samples — so packing at
+  construction cannot pay — and the real lever is the operation pool's 128 slots against thousands in
+  flight, which makes most operations (266 B + request bytes) allocate fresh. A larger or depth-adaptive
+  pool first (watch the 8-probe `TryTake`); then batch/transaction **buffer packing** — one shared buffer,
+  contiguous run to the transport. The abandoned RESPite spike implemented packing fully (PR #2959,
+  `marc/respite`: `RespBatch`, `{Buffering,Merging}BatchConnection`, `SynchronizedBlockBufferSerializer`).
+  Check first whether the interpolated writer's reserved `*N` prologue still lets frames sit adjacently,
+  or leaves gaps that cost a copy.
+- **Unobserved faults on the new surface:** a non-pooled `async ValueTask` that completes asynchronously is
+  `Task`-backed (every one down-level, 10 of 13 on net6+), so a faulted one the caller drops can still
   raise `UnobservedTaskException`. Dropping an un-awaited `ValueTask` is already misuse; low priority.
-
-- **Batch-mode profile (2026-10-07), and two things it ruled out.** SADD, 50 callers x 100 per batch, perf with
-  full stacks: v4 is round-trip bound (40-50% of samples are idle pool workers and the read loop's spin-before-park),
-  command assembly into the transport (`RespConnection.Send`) is 0.9-1.5% - so **buffer packing at construction
-  cannot pay** - and socket sends are ~2x v3's (v4 ~130-145 commands per send, v3 ~280; v4 reads in far larger
-  chunks). Tried and reverted:
-  - *Gathering several committed pages into one send* (copy up to 32 KB into a scratch buffer): sends did not fall
-    (12,950 -> 16,365 per 2M ops). Pages are not the split; each send is ~one caller's flush, because the writer
-    wakes and sends per flush. Only holding sends back would merge callers, which the coalescing experiment found
-    does not raise throughput (round-trip bound).
-  - *Batch/transaction attaching through the inline-copying `Attach(in RespRequest)`* instead of the span overload
-    (which rents an ArrayPool array per command - a 100-deep batch overflows the pool's per-thread cache onto its
-    locked per-core stacks, ~4% of samples): allocation ROSE ~80 B/op, because at depth most operations are new
-    (pool of 128 vs ~5,000 in flight) and each new one allocates its own inline buffer. Throughput within noise.
-  The real lever both point at is **operation pool size at depth**: 128 slots against thousands in flight means
-  most operations (266 B, plus request bytes) are allocated fresh. A larger or depth-adaptive pool (watch the 8-probe
-  `TryTake`) would let the inline buffer stick and make the ArrayPool change pay.
-
-- **`MaintenanceOptInServerTests.SequenceIdsAdvanceAndCanBeRepeated` fails when its class runs alone** (5 of 5,
-  with and without the 2026-10-07 pool change; usually passes in the full suite): `SendShardNotification` reaches 0
-  connections where 1 opted in - the opt-in has not landed at the fake server when the notification is sent. A
-  test-ordering dependence; look at what `OptInAsync` awaits.
-
-- **Watch: net8.0 cluster tests timing out at 10 s under the full suite** (`DisabledCommandsStillConnectCluster`,
-  `PubSubKeyNotificationTestsCluster.SubKeySpaceEvent_HandlesNewlineInField`,
-  `ARetiringServerIsNotSelectableEvenThoughItStillOwnsItsSlots`). Seen in 2 of 7 full net8.0 runs after the per-thread
-  operation cache (03bbb05a), 0 of 3 before it; 0 of 16 when the cluster tests run on their own, either build. Not
-  attributed - but if it recurs, compare with and without that commit first.
-
-- **Watch: `QueuedResultTests.RetryTransactionFireAndForgetSharesOneCompletedTask` failed once** (net8.0, full
-  suite, 44ms, 2026-10-08, after the main merge; message not captured), 0 of 6 in isolation. It asserts that a
-  retry transaction's per-command tasks are settled when `ExecuteAsync` returns, which `RetryTransaction`
-  guarantees by awaiting them; if it recurs, capture the assertion before anything else.
-
-- **`DedicatedThreads` is not pool-independent on Linux** (found 2026-10-08 by the starvation harness). .NET's
-  "blocking" socket `Receive` is non-blocking underneath and is woken through the thread pool, so with the pool
-  starved the dedicated reader thread never wakes for data already in the kernel buffer (seen: Recv-Q 7 bytes,
-  one reply, unread; reader parked in `SocketAsyncContext.ReceiveFrom`). Affects the pump and the sync context
-  alike, and probably v3. `DOTNET_SYSTEM_NET_SOCKETS_INLINE_COMPLETIONS=1` removes it entirely. Options: document
-  that alongside `DedicatedThreads`, or have the dedicated reader (and writer) wait with `Socket.Poll` - a direct
-  syscall - before each blocking call, so it never needs the pool.
-  **2026-10-09, fixed (D2 option b).** Probed first (scratchpad `sockprobe`, PING round trips over
-  loopback): async connect 57.6us CPU + 1 pool item per round trip; `Poll` before `Receive` 50.9us and STILL 1 pool
-  item - the cost is the epoll registration itself, which queues a pool item per readiness event whether or not
-  anyone waits; `Socket.Blocking = true` changes nothing; a socket that was only ever used synchronously 7.6us and 0.
-  Dispose wakes a blocked `Receive` and a blocked `Poll` alike. After connect, a dedicated connection already did
-  only synchronous IO (the Sync writer never transitions, inline sends defer to it), so the fix is the connect:
-  `Socket.Connect` and `SslStream.AuthenticateAsClient` on a LongRunning thread (the connect timeout races the
-  attempt), with cancellation disposing the socket; not with a tunnel. Results, dedicated, no env var:
-  `IDatabase` sync seq 25.6k ops/s at 16.1us CPU (was 20.4k at 78us); TLS 23.7us vs 105us default, 0 pool items;
-  starved pool, every sync path runs. `SyncCompletionTests` now asserts the absolute (500 -> 0 pool items).
-  **.NET 11 (RC1, measured with the same probe):** dotnet/runtime#124200 flips a socket back to blocking after
-  `ConnectAsync`, so async-connect + sync IO drops to 17.8us CPU per round trip - but still 1 pool item (the epoll
-  registration stays), and TLS's async handshake still flips it for good. Sync connect is 7.7us and 0 on both
-  runtimes, so the fix stands on .NET 11 too.
-  **Side finding, not fixed:** in DEFAULT mode an abandoned connect (timeout) keeps its socket in SYN-SENT until
-  the OS gives up - `ConnectAsync` is called without the token. 5 blackholed attempts left 5 sockets; dedicated
-  mode leaves none.
-
-- **Batch/transaction buffer packing**: write a batch's commands adjacently into one shared buffer, rather
-  than one rented frame per command, and hand the transport one contiguous run. The abandoned v3-era RESPite
-  spike implemented this fully (PR #2959, `marc/respite`, "WIP : RESPite overhaul" - still open but idle since 2026-08: `src/RESPite/RespBatch.cs`,
-  `Connections/Internal/{Buffering,Merging}BatchConnection.cs`, `SynchronizedBlockBufferSerializer`; v4's
-  `BlockBufferSerializer` remarks are the surviving trace).
-  **Check first** whether the interpolated writer's reserved prologue - the `*N` count is back-filled into
-  padding reserved ahead of each frame - still lets frames sit adjacently, or leaves gaps that cost a copy.
-- **Retry: stale comments.** `RetryDatabase.ExecuteAsync` says the policy "will live here in due course; for
-  now it is a straight pass-through" (it retries); `RespRetryExecutor`'s remarks say "Failover is not wired
-  up yet" (it is, via `GetFailoverSource()`).
-- **Prose still says "the new core".** The rename pass (a1673a96) renamed types and members only; comments
-  and docs still say "the new core" / "old core" where there is now one. A wording pass to "the connection
-  manager" (or just "the core") - noisy, so its own commit.
-- **Performance, remaining ideas** (after the 2026-10-07 work that took v4 from ~55% of v3 to parity or better;
-  each now promises single-digit percent, so parked): `RespPayload` as a struct (public API, ~32 B/op); keep small
-  request bytes inline in the operation (removes the last per-command array when operations are new at depth, at
-  a fixed cost to every operation); `IDatabase`'s remaining ~100 B/op over the context API is the `Task` and the
-  thread-pool work item that runs its completion (the completion source went 2026-10-07: an `AsyncTaskMethodBuilder`
-  promise held by the operation) - the work item could go if the operation queued itself (`IThreadPoolWorkItem`,
-  net6+) rather than through the source's continuation; slim the operation further (266 B: the token + registration are 24, the
-  request memory/owner/refcount 28); a growable SPSC ring for the pending queue (`ConcurrentQueue` segments are ~5%
-  of allocation at extreme depth, but only on growth - risky, three threads touch it). Not worth it: stackalloc
-  request rendering (that path is ~1% of CPU now), delaying the writer to coalesce (small writes follow
-  throughput, they do not limit it), a dedicated small-buffer pool (slower than ArrayPool's thread cache).
-  **Warm-up** is JIT tiering, as for v3 (which ramps as much): `TieredCompilation=0` runs ~1.4-1.5M INCR/s from
-  the first iteration where default tiering is ~1.0M rising to ~1.25M by the sixth, hot methods lingering in the
-  PGO instrumented tier. Options are blunt (`AggressiveOptimization` forfeits PGO; ReadyToRun in the package is a
-  packaging change) - left to applications, and benchmarks should warm up before measuring.
-- **Replace the method-replaying decorators with executor decorators.** Eager frames mean the "what to replay"
-  problem is solved below the API: `RedisDatabase` is a thin `IDatabase` over a `RespDatabaseContext`
-  (every member is `_inner.<Group>.XAsync(...)`), so `new RedisDatabase(ctx.WithExecutor(retry))` retries
-  the whole surface. Candidates: `RetryDatabase` + `RetryTransaction` (+ the `AutoDatabaseGenerator` /
-  `CapturedArgs` capture machinery), `KeyPrefixed*` (~2.6k lines; `RespContext` already prefixes at write),
-  and `MultiGroupDatabase` (same generator; `RespGroupExecutor` exists). What has to be settled first:
-  - **Batches/transactions through a retrying executor.** `RespRetryExecutor` forwards `CanWriteRuns`/
-    `CanWriteTransactions` but not `TrySendBatch`/`TrySendTransaction`, so a run is not retried as a unit.
-    Retrying one needs fresh pooled operations per attempt behind durable per-command tasks - what
-    `RetryTransaction` does today by replaying calls - and conditions re-evaluated per attempt.
-  - **Sync.** `RedisDatabase` sync members are `Wait(...Async)`, so they would *retry* (blocking through the
-    delays) rather than hit the executor's throwing `Send`. A decision, not a blocker: allow it, or keep
-    `WithRetry` async-only by refusing sync on the returned object.
-  - **Inners that are not context-backed.** `WithRetry`/`WithKeyPrefix` accept any `IDatabaseAsync`
-    (mocks, user decorators). Keep the old wrapper as the fallback, or require `IRespTarget`.
-  - **Unit of retry moves from method to frame.** Multi-send members (cluster fan-out splits, scan pages,
-    script load paths, `HashImport` chunks) retry per send rather than restarting the method; usually
-    better, but audit them. Scans gain retry they do not have today (`RetryDatabase` forwards them).
-  - **Prefix-specific:** stripping the prefix from keys in *replies*, `KeyRandom` refusal, script keys
-    (`RedisDatabase.Scripts` passes `withKeyPrefix: null`), and `WithKeyPrefix`'s own
-    `is KeyPrefixedDatabase` prefix-merge.
-  - **Feature reporting:** `GetFeatures` must still report `Retry`/prefix so nesting and batch rejection hold.
-  - Gains beyond code size: `asyncState` would work on a retrying database (the bridge task spans attempts).
-- **Trusted-callback completion mode** - test whether Respire's speed comes from completing callers inline
-  on the reader with a watchdog; if so, offer it opt-in, default off. **Mechanism confirmed** (2026-10-07,
-  Respire 0.7.14 @ ee842696, `Networking/CompletionScheduler.cs`): completion cores are
-  `RunContinuationsAsynchronously = false`; each receive drain's replies (up to 256) go to ONE runner that
-  completes them serially, in wire order, inline. Busy socket: the runner is a pool work item. Idle socket:
-  the receive loop posts its next read and then runs the batch on its own thread (`RunWhileAwaiting`). A
-  watcher hands the undelivered tail to a fresh runner after a hard-coded 500 ms with no progress
-  (`StalledDeliveryThreshold`, internal), logging a warning; ordering is lost from that point. So: no
-  thread theft from the socket read, but head-of-line blocking of every caller on the connection behind any
-  continuation, up to 500 ms. Connection model: multiplexed, one connection by default
-  (`RespireOptions.Connections`, round-robin when raised), plus a small dedicated pool for blocking commands.
-  **Harm measured** (RespFest work league, `results/work-league-20261007`, RespFest f341e8e local): callers
-  spin N us of CPU after each reply. Respire 1.12M / 38k / 9.4k ops/s at 0 / 20 / 100 us - pinned to the
-  serial 1/N ceiling, p50 6.7 ms at 100 us; v3 394k / 303k / 91k and v4 935k / 327k / 89k scale with cores.
-  So inline completion is out as a default; the only variant still worth a trial is batching pool wakes
-  per parse pass with continuations kept asynchronous.
+- **Performance, remaining ideas** (each promises single-digit percent, so parked): `RespPayload` as a
+  struct (public API, ~32 B/op); small request bytes inline in the operation; `IDatabase`'s remaining
+  ~100 B/op over the context API is the `Task` plus the pool work item that runs its completion — the work
+  item could go if the operation queued itself (`IThreadPoolWorkItem`, net6+); slim the operation further
+  (266 B: token + registration are 24, request memory/owner/refcount 28); a growable SPSC ring for the
+  pending queue (risky, three threads touch it). Not worth it: stackalloc request rendering, delaying the
+  writer to coalesce, a dedicated small-buffer pool. **Warm-up** is JIT tiering, as for v3: left to
+  applications, and benchmarks should warm up before measuring.
+- **Trusted-callback completion:** inline completion measured and ruled out as a default (head-of-line
+  blocking pins throughput to the serial 1/N ceiling — RespFest work league, `results/work-league-20261007`,
+  against Respire's `CompletionScheduler`). The one variant left: batching pool wakes per parse pass with
+  continuations kept asynchronous.
+- **Non-nullable `AppendFormatted(long)` / `(double)` overloads** on `RespRequestBuilder`, beside today's
+  `long?`/`double?` (asked for by the NRedisStack port). Needs an overload-resolution sweep across the
+  interpolated call sites before adding.
+- **`IServer` overload audit:** the overload-minimalism audit (`notes/api-surface/overload-audit.md`, acted
+  on in #3356) deliberately did not examine `IServer` — large, node-scoped, mostly one method per command,
+  but unexamined.
+- **.NET 11 TFM:** try runtime async; prototype caller-driven TLS (`TlsBufferSession`); run the suite and
+  RespFest on 11 early. **The RC2 thread-pool regression (dotnet/runtime#135855) lands mostly on our own
+  hops** (2026-10-15, 64 callers, GET 1 KiB): v4 default 762k → 532k ops/s (−30%) at 5µs caller work, but
+  `SEREDIS_DEDICATEDTHREADS=1` on RC2 gives 758k (.NET 10 dedicated: 798k). The Redis-free repro splits its
+  −36% about 1/3 IO hop, 2/3 caller continuations. Next: dedicated reader (+writer) by default on net11+,
+  with a cap for wide clusters; 1 caller costs −7% ops but less CPU per op.
 
 ## Status
 
-- **2026-10-30: an `ASK` re-send drops the `CLIENT CACHING` prefix and exempts `ASKING` from the sequence check.**
-  Both are one-shot server flags that mean "the next command", and each is the other's next command: the server
-  clears either after any command that is not the one that set it (`resetClient`, outside `MULTI`), so there is
-  no order that keeps both. Measured on Redis 8.9 with a slot set `IMPORTING`: `ASKING, CLIENT CACHING YES, GET`
-  answers `-MOVED` (which, as a second redirect, fails the command); `CLIENT CACHING YES, ASKING, GET` is served
-  but the key is never tracked, so a stored reply would be stale until eviction; `ASKING, ECHO, GET` answers
-  `-MOVED` too, so high-integrity mode broke every `ASK` redirect. The redirect is the half that cannot be given
-  up. `RespEndpointExecutor.TryResendAsking` now calls `RespPayloadOperation.DropPrefix` (the operation remembers,
-  and stamps `RespPayload.PrefixDropped` on its reply; `RespClientCache.TryCompleteCore` refuses such a reply and
-  counts it as `RefusedUntracked`) and marks the `ASKING` operation `SequenceChecked = false`, so the pair's one
-  check lands behind the command as a transaction's does behind `EXEC`. A dropped `CLIENT CACHING NO` costs one
-  spurious invalidation push, harmless. `MOVED` is unaffected: the whole operation is re-sent, prefix and check
-  included. Tests: `RespRedirectFollowingTests` (prefix dropped and nothing stored; check behind the command, both
-  nodes' counters in step) and `RespClientCacheTests.AReplyWhoseRequestLostItsPrefixIsNotStored`. The in-process
-  server cannot produce an `ASK`, so there is no end-to-end case; the fake-transport tests assert the exact bytes.
-- **2026-10-29: high-integrity mode restored (`ConfigurationOptions.HighIntegrity`).** Lost with the old core: the
-  option, `ConnectionFailureType.ResponseIntegrityFailure`, the docs and the `HighIntegrity*Tests` classes all
-  survived, but nothing assigned a token or validated a reply, and the test classes passed vacuously because they
-  only re-ran suites with the flag set. Rebuilt as the dual of the prefix frame, at the same choke point:
-  `RespConnection.SequenceCheckHead` makes `Stage` write `ECHO <4-byte counter>` behind every request whose
-  message is `SequenceChecked` (a per-connection counter, so nothing is stored per request: the n'th check must
-  answer n), with one more pending entry naming `RespSequenceCheckSink`; the reader holds a checked reply (a
-  reservation on the receive buffer) until the check validates, delivers it then, or faults it and closes the
-  connection with `ResponseIntegrityFailure` (RESPite throws a generic fault; `RespClientConnection` substitutes the
-  shipped type, so `ConnectionFailed` reports it). A handed-off reply (redirect, `+QUEUED`) is not held but its
-  check is still validated, which is what the MOVED case needed. `RespConnectionManager` enables it after the
-  handshake, interactive connections only, `ECHO` rendered through the command map (a map without `ECHO` refuses
-  the connection); `RespTransaction` marks `MULTI`, `WATCH`, the condition probes and the queued commands
-  unchecked, so `EXEC`/`UNWATCH` validate the span - v3's rule. Differences from v3, deliberate: the handshake's
-  own commands are not checked (v3 checked all but AUTH/HELLO; the replies are validated by content anyway), the
-  failed command gets `RedisConnectionException(ResponseIntegrityFailure)` rather than v3's
-  `InvalidOperationException`, and an injected `SELECT` is checked like any command (`ASKING` is exempt; see the
-  2026-10-30 entry). Tests the mode never
-  had, on either core: `RespSequenceCheckTests` (RESPite: wire shape, the hold, wrong token, missing frame, push
-  between reply and check, split receive, buffer roll under a held reply, hand-off, prefix + check, close while
-  held) and `HighIntegrityWireTests` (SE.Redis: EXEC-only checking in a transaction, every member in a batch, the
-  failure type), plus `HighIntegrityMovedUnitTests` now asserts the checks happened. `design/command-flow.md`
-  describes both framing extras and client-side caching end to end.
-  **Measured** (RespFest `hi-off` / `hi-on`, 2026-10-29, local Redis 8.2, 3 repeats, governor powersave; vendored
-  clients `dotnet-stackexchange-v4` @ 48e6e7aa, `-v4-base` @ 86a82688, `-v3-hi` = 3.3.0 with the switch):
-  - *Off path, branch vs base:* identical within spread on every cell - ops/s 52.3k/52.3k incr-seq, 506k/507k
-    incr-pipe32, 950k/961k incr-conc64, 50.3k/50.0k get-1k-seq, 758k/754k get-1k-conc64; CPU us/op 59.2/60.0,
-    6.21/6.44, 7.68/7.63, 61.3/61.8, 9.48/9.62. No regression.
-  - *Cost of the mode, v4 on vs off:* incr-seq -5% ops/s (+6% CPU/op), get-1k-seq -4%, incr-pipe32 -29% (+15% CPU),
-    incr-conc64 -31% (+48% CPU/op, p50 61 -> 89us), get-1k-conc64 -25% (+34% CPU/op). Peak RSS under concurrency
-    81 -> 224 MB and 95 -> 242 MB.
-  - *v3 3.3.0, on vs off:* incr-seq -4%, get-1k-seq -5%, incr-pipe32 -23%, incr-conc64 -8.5% (+7% CPU/op),
-    get-1k-conc64 0% (v3 is bottlenecked elsewhere there). Absolute, both on: v4 652k vs v3 540k incr-conc64, 570k
-    vs 274k get-1k-conc64, 358k vs 365k incr-pipe32, 49.8k vs 52.7k incr-seq.
-  - *Diagnosis of the concurrent gap (inferred, not yet profiled):* the hold is a reservation on the receive buffer,
-    and `EnsureSpace` rolls to a fresh buffer whenever a reservation is outstanding - so under load, where some
-    reply is nearly always held across a receive boundary, the inbound buffer rolls far more often than before
-    (the RSS doubling is the symptom). The server writes a reply and its ECHO contiguously, so the check is
-    usually already in the buffer when the reply is matched: **next step** is to look ahead for a complete check
-    frame before parking, and reserve only when the check genuinely straddles a read. v3 had no hold (it
-    deferred `Complete` on an already-parsed message), which is why its concurrent cost is a quarter of ours.
-  - *Mitigated (`v4-high-integrity-lookahead`, RespFest `hi-on-la` / `hi-on-la2`):* two changes. The look-ahead
-    (9106f4ce) alone bought ~10% CPU/op at 64 callers and nothing in RSS, which falsified the buffer-roll
-    diagnosis: allocation per op was +56 bytes with the mode on, identical before and after, and that was the
-    second `ConcurrentQueue` entry per command standing in for the check's reply. 91810686 moves the "checked"
-    bit into the request's own `PendingEntry` (its padding) and stages the check in one transport write instead
-    of head then tail. Result, mode on, same session: allocation per op now equal to mode off (104 / 189 / 1161
-    B/op), peak RSS back to baseline (76-97 MB against 138-333), and against the branch before the mitigation:
-    incr-pipe32 379k -> 415k ops/s (CPU/op 7.05 -> 6.89), incr-conc64 653k -> 701k (11.67 -> 9.83),
-    get-1k-conc64 590k -> 619k (12.66 -> 11.15); sequential unchanged. Cost of the mode after mitigation, on vs
-    off: incr-seq -5%, get-1k-seq -4%, incr-pipe32 -18% (+7-11% CPU/op), incr-conc64 -26% (+28% CPU/op),
-    get-1k-conc64 -18% (+18% CPU/op). What remains is the mode itself: twice the frames each way, and at 64
-    callers the single-threaded server is handling 1.4M commands/s for 700k operations, so part of the remaining
-    throughput gap is the server's, not the client's.
+Newest first; closed entries are deleted (this file's git history holds them).
 
-- **2026-10-09: one group accessor instead of two (was a backlog item).** `RespDatabaseContext` is now an
-  `IRespKeyspaceTarget` and `RespServerContext` an `IRespServerTarget` (each its own context), so the single
-  constrained-generic accessor per group serves targets and contexts alike; the non-generic ones are gone, from
-  the extension properties and the down-level shims. Machine code: identical to the old direct accessor at tier 1
-  (4 bytes for `ctx.Strings`, 1,935 for a prefixed context, 40 via `IDatabase`); only without tiering does the JIT
-  leave a direct call to the trivial getter rather than inlining it. Side effect, a fix: `Config`, `Diagnostics`,
-  `Scripts` and `PubSub` had no target accessor, so `server.Config` did not compile on an `IServer`; it does now,
-  and so does `db.PubSub`.
-
-- **2026-10-08: `Blocking()` contexts (named `Synchronous()` until 2026-10-09) - a supported sync path for command groups, ours and libraries'.**
-  `ctx.Blocking()` (on `RespContext`, `RespDatabaseContext`, `RespServerContext`) makes the shared send path
-  call the executor's blocking `Send`, so every `...Async` group method returns an already-completed task and
-  `.GetAwaiter().GetResult()` is correct (on an ordinary context it is not: a pending `ValueTask` throws on
-  `GetResult`). Starvation harness (2 pool workers, both blocked; caller on its own thread): healthy pool, sync
-  context 25.6k ops/s vs `IDatabase` sync (pump) 23.9k; starved with `DedicatedThreads` and inline socket
-  completions, both ~22k and never stalling, naive `AsTask().GetResult()` stalling every time.
-  **2026-10-09, done:** paired sends (EVALSHA behind SCRIPT LOAD, HIMPORT PREPARE + row) block too, via a
-  blocking pair `Send` on the executors (the endpoint waits the body on the calling thread and tells the gate
-  there); `RedisDatabase`'s sync members all send through a cached blocking context, helpers included
-  (scripts, locks, `StringGetWithExpiry` - now two round trips rather than one pipelined pair); `SyncCall`,
-  `SyncPump` and RESPite's `IContinuationSink`/interposition machinery are deleted. The endpoint's blocking
-  wait got the backstop `SyncWait` had (2x sync timeout + 5s when heartbeat-driven), from an explicit
-  `SyncTimeoutMilliseconds` rather than via the modelled server, which can be null. Executors that cannot
-  block (`CanSendBlocking`: batch, transaction) send asynchronously and `SyncWait` blocks on the task.
-  Retry blocks since 2026-10-09: `RespRetryExecutor.Send` (single and pair) runs the loop over the inner
-  synchronous send, pausing with `RetryController.FailoverOrDelay` (`Thread.Sleep`, or the failover token's
-  wait handle) - prompted by the NRedisStack port, which proxies through the retry wrapper.
-
-- **2026-10-08: InlineSends, ON by default since 10 clean full-suite runs (opt out: `SEREDIS_INLINESENDS=0`).** A caller whose request is
-  alone in flight on its connection sends its own bytes instead of waking the writer loop; bounded to what was
-  staged when it claimed the writer, with the rest (and any send that would block) handed to the loop. Why: each
-  thread-pool hand-off wakes a worker that then spins idle, and that was ~85us of every sequential request's CPU
-  in v3 and v4 alike (118 -> 30us per INCR with the pool's spin disabled). RespFest (`inline3-*`, 4.0.67):
-  work-100-seq 265.8 -> 203.0us CPU/op (v3 207.3), incr-seq 69.2 -> 66.5, get-1k-seq 70.3 -> 67.7 (+2% ops/s);
-  concurrent within noise. Made the default after 10 full-suite runs with it on (net8.0 and net10.0
-  alternating): 9 clean, 1 with only the known `RespHashImportProbeTests` flake. An earlier version had shown two
-  `ScanTests.*ScanLarge` failures and a 10s timeout in 6 runs; none recurred - keep an eye out.
-
-- **2026-10-08: queued operations act through the token they were queued with.** Batches and transactions
-  queue `QueuedOperation` (operation + token) and runs are written as `RespRunEntry`, so a batch member that was
-  cancelled, consumed and re-rented before `Execute` is skipped rather than writing - or faulting - the stranger
-  now on its instance. Test: `RespConnectionTests.ARunWritesTheLifeThatWasQueuedNotTheInstancesCurrentOne`
-  (fails on the old behaviour by writing the stranger's request).
-
-- **2026-10-07: a lost batch completion, found and fixed.** One `IBatch` command in ~40 benchmark runs never
-  completed: the operation had been pooled while a writer still held a reservation on its request (the reply landed
-  and the result was taken between the writer staging the bytes and releasing them), re-rented for a batch, and the
-  writer's late release took the NEW life's request count to zero - so the batch write skipped it as "already
-  completed". Now the last request reference recycles (`RespMessageBase.Recycle`). Also: a stale or premature
-  `GetResult` reset whichever life was current in a `finally`; it now throws without touching it. Both have
-  deterministic tests in `RespConnectionTests`. Benchmarks taken before this are void.
-
-- `v4` branched 2026-10-06 from `marc/v4-core-operation` (now superseded); packages compute as
-  `4.0.N-alpha`, assembly version `4.0.0.0`. `main` drift: 0 (merged at c176699f).
-- Latest fully green `v4` CI: 220d480c (Ubuntu; Windows net10.0 and net481), after the stall, stale-slot, pair-SELECT and
-  stale-pump-signal fixes. First fully green: 37428740387 at cacab8cf.
+- **2026-11-17: ledger refresh.** Closed since 2026-10-13 and removed above, the headline being the
+  **method-replaying decorators are gone** (#3338 + the tx-retry work): `KeyPrefixed*` (~4,100 lines of
+  member-by-member tests with them), `RetryDatabase`, `RetryTransaction`, the `[AutoDatabase]` generator and
+  `CapturedArgs` are deleted; `WithKeyPrefix`/`WithRetry` re-context onto the executor chain, retrying
+  transactions replay frames per attempt (`RespRetryTransactionExecutor`) and now carry `asyncState`, and
+  `MultiGroupDatabase` is a slim `RedisDatabase` over `RespGroupExecutor`. The stale `RetryDatabase`/
+  `RespRetryExecutor` comments went with the files.
+- **November, shipped in order:** #3349 cache hits reuse the deserialized result for provably-shareable
+  types (with #3350's per-key removal notifications folded into its branch) — the HybridCache enablers;
+  #3338 decorators onto the context/executor core; #3354 per-command cache serve/store flags and
+  `CachePolicy.Storage = External`; #3355 intent-merge of `main` to 3.4.31 (MOVING drain hold, CLUSTER
+  SLOT-STATS, keyed routing tests, SER1xx experiment block); #3356 overload minimalism (`SortedSetRange`,
+  `Expiration` on RESTORE, `GeoCenter`; audit and outcome in `notes/api-surface/overload-audit.md`).
+- **2026-11-03: independent v3 → v4 behaviour audit** for release notes: `notes/v3-v4-behaviour-audit.md`.
+  Empirical headline: both branches' full suites, same server, fail on exactly the same tests; v4 runs
+  ~1,270 more, all new coverage. Its "known gaps" and "test-coverage debts" are folded into Pending above.
+- **2026-10-30: ASK re-sends drop the `CLIENT CACHING` prefix and `ASKING` is exempt from the sequence
+  check** (4744cfc7) — the two one-shot server flags cannot be ordered so both survive; the redirect wins,
+  the cache refuses the prefix-dropped reply (`RefusedUntracked`). `design/command-flow.md` has the detail.
+- **2026-10-29: high-integrity mode restored** (`ConfigurationOptions.HighIntegrity`, lost with the old
+  core): `ECHO <counter>` behind every checked command at the `Stage` choke point, reply held until the
+  check validates, `ResponseIntegrityFailure` on mismatch. After the look-ahead + staged-write mitigation
+  (9106f4ce, 91810686): allocation per op equal to mode-off, RSS at baseline; cost of the mode is −5%
+  sequential, −18…−26% at high concurrency — the rest is the mode itself (twice the frames each way).
+  Mechanism and tests: `design/command-flow.md`, `RespSequenceCheckTests`, `HighIntegrityWireTests`.
+- `v4` branched 2026-10-06 from `marc/v4-core-operation`; packages compute as `4.0.N-alpha` (latest
+  4.0.165-alpha, 2026-11-13), assembly version `4.0.0.0`. `main` drift: 1 commit (#3333; see Pending —
+  the rev-list count overstates since the squashed intent-ports). CI at the branch head 0d18c571: Ubuntu
+  green; Windows red on `ServerTakesPrecendenceOverSnapshot` (see Pending). The #3356 PR runs were fully
+  green on both platforms.
