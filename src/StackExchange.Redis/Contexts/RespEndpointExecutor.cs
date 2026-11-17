@@ -2817,18 +2817,30 @@ namespace StackExchange.Redis
             {
                 var failures = Interlocked.Increment(ref _connectRetryCount);
                 var fault = AsConnectionFault(ex);
-                Volatile.Write(ref _lastConnectFault, fault);
-                Server?.Multiplexer.Logger?.LogErrorConnectFailed(fault, LogName, fault.Message);
 
-                // An endpoint that only ever refuses has nobody to tell the client it has moved: every
-                // other path that re-reads the topology needs somebody ELSE to notice first - a
-                // notification, a MOVED from a reachable node, a peer's broadcast. The v3 bridge closed
-                // that gap from its own retry loop; this core had no equivalent, so a dead address was
-                // dialled indefinitely. ServerEndPoint owns the restraint
-                // (ConfigCheckSeconds, and only above a threshold), so this just reports the count.
-                if (!IsSubscriptionEndpoint && Server is { } repeatedly)
+                // A dial the test-only AllowConnect gate refused was DECLINED, not failed: nothing was
+                // learned about the endpoint, so the refusal must not overwrite the fault that answers
+                // "why is this endpoint down" - the gate exists to freeze exactly that state, and
+                // LastException reporting "Aborting (AllowConnect: False)" over the real reason is the
+                // race ExceptionFactoryTests.ServerTakesPrecendenceOverSnapshot kept losing on Windows.
+                // Nor is a refusal a repeated failure worth a topology re-read. The backlog and the
+                // retry timer are still serviced below, so the endpoint revives when the gate reopens.
+                bool declinedByGate = Server?.Multiplexer is { AllowConnect: false };
+                if (!declinedByGate)
                 {
-                    repeatedly.OnRepeatedConnectFailure((int)Math.Min(failures, int.MaxValue));
+                    Volatile.Write(ref _lastConnectFault, fault);
+                    Server?.Multiplexer.Logger?.LogErrorConnectFailed(fault, LogName, fault.Message);
+
+                    // An endpoint that only ever refuses has nobody to tell the client it has moved: every
+                    // other path that re-reads the topology needs somebody ELSE to notice first - a
+                    // notification, a MOVED from a reachable node, a peer's broadcast. The v3 bridge closed
+                    // that gap from its own retry loop; this core had no equivalent, so a dead address was
+                    // dialled indefinitely. ServerEndPoint owns the restraint
+                    // (ConfigCheckSeconds, and only above a threshold), so this just reports the count.
+                    if (!IsSubscriptionEndpoint && Server is { } repeatedly)
+                    {
+                        repeatedly.OnRepeatedConnectFailure((int)Math.Min(failures, int.MaxValue));
+                    }
                 }
 
                 Queue<RespPayloadOperation>? stranded;

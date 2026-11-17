@@ -90,6 +90,53 @@ public class ExceptionFactoryTests(ITestOutputHelper output, InProcServerFixture
         }
     }
 
+    /// <summary>
+    /// The <c>AllowConnect</c> gate DECLINES a dial rather than failing it: nothing was learned about the
+    /// endpoint, so the refusal must not replace the fault that answers "why is this endpoint down".
+    /// Before the guard in <c>RespEndpointExecutor.ConnectAsync</c>, the redial the failure itself provokes
+    /// overwrote <c>LastException</c> with "Aborting (AllowConnect: False)" - the race
+    /// <see cref="ServerTakesPrecendenceOverSnapshot"/> kept losing on Windows CI.
+    /// </summary>
+    [Fact]
+    [Trait(TestCategories.Category, TestCategories.SimulatedConnectionFailure)]
+    public async Task DeclinedDialDoesNotOverwriteLastException()
+    {
+        try
+        {
+            await using var conn = Create(keepAlive: 1, connectTimeout: 10000, allowAdmin: true, backlogPolicy: BacklogPolicy.FailFast, allowSimulateConnectionFailure: true);
+
+            conn.GetDatabase();
+            conn.AllowConnect = false;
+
+            var endpoint = conn.GetEndPoints()[0];
+            var server = conn.GetServer(endpoint);
+            Assert.SkipUnless(server.CanSimulateConnectionFailure(), "Skipping because server cannot simulate connection failure");
+            server.SimulateConnectionFailure(SimulatedFailureType.All);
+
+            Assert.True(
+                await Poll.UntilAsync(() => conn.GetServerSnapshot()[0].LastException is not null),
+                "the simulated failure was never recorded");
+
+            // force the redial rather than racing the background one the failure provoked; the gate
+            // refuses it (or backoff declines it without dialling - either way, nothing was learned)
+            var executor = conn.UnderlyingMultiplexer.ConnectionsIfCreated!.InteractiveEndpoint(endpoint);
+            for (int i = 0; i < 3; i++)
+            {
+                try { await executor.ConnectNowAsync(); }
+                catch (RedisConnectionException) { }
+                await Task.Delay(50);
+            }
+
+            var last = conn.GetServerSnapshot()[0].LastException;
+            Assert.NotNull(last);
+            Assert.DoesNotContain("AllowConnect", last!.Message);
+        }
+        finally
+        {
+            ClearAmbientFailures();
+        }
+    }
+
     [Fact]
     public async Task NullInnerExceptionForMultipleEndpointsWithNoLastException()
     {
