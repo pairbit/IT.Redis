@@ -171,33 +171,6 @@ public static partial class Scripts
         CancellationToken cancellationToken = default)
         => EvaluateCached(scripts, script, keys, args, flags, readOnly: true, RespHandlers.Result);
 
-    /// <summary>Render the EVALSHA and send it behind the preamble.</summary>
-    private static ValueTask<TResult> SendPair<TResult>(
-        RespContext context,
-        ref RespRequestFrame preamble,
-        RedisValue hash,
-        ReadOnlySpan<RedisKey> keys,
-        ReadOnlySpan<RedisValue> args,
-        CommandFlags flags,
-        bool readOnly,
-        IRespPreambleGate gate,
-        IRespHandler<TResult> handler)
-    {
-        var command = readOnly
-            ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVALSHA_RO, ref flags)
-            : RedisCommand.EVALSHA;
-        var request = context.Render($"{command}{hash}{(RedisValue)keys.Length}{keys}{args}");
-        try
-        {
-            return context.SendWithPreambleAsync(
-                ref preamble, ref request, flags, handler, gate);
-        }
-        finally
-        {
-            request.Dispose();
-        }
-    }
-
     /// <summary>Render the EVALSHA and send it behind a preamble the registry already owns.</summary>
     /// <remarks>
     /// The registry's preamble owns nothing poolable - it is a fixed array that is never returned - so
