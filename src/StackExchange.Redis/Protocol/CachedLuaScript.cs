@@ -42,27 +42,21 @@ namespace StackExchange.Redis
         {
             _str = Encoding.UTF8.GetString(bytes);
             _hash = Encoding.ASCII.GetBytes(Sha1Hex(bytes));
-            ReadOnlySpan<byte> header = "*3\r\n$6\r\nSCRIPT\r\n$4\r\nLOAD\r\n"u8;
-            Span<byte> utf8len = stackalloc byte[10];
-#if NET
-            var status = bytes.Length.TryFormat(utf8len, out var written);
-#else
-            var status = Utf8Formatter.TryFormat(bytes.Length, utf8len, out var written);
-#endif
-            Debug.Assert(status);
-            var request = new byte[header.Length + written + 2 + bytes.Length];
-            header.CopyTo(request);
+            _request = AddHeader(bytes, out var start);
+            _start = start;
+        }
 
-            var start = header.Length;
-            utf8len.CopyTo(request.AsSpan(start));
-            start += written;
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CachedLuaScript"/> class.
+        /// </summary>
+        /// <param name="str">str.</param>
+        public CachedLuaScript(string str)
+        {
+            _str = str;
 
-            "\r\n"u8.CopyTo(request.AsSpan(start));
-            start += 2;
-
-            bytes.CopyTo(request.AsSpan(start));
-
-            _request = request;
+            var bytes = Encoding.UTF8.GetBytes(str);
+            _hash = Encoding.ASCII.GetBytes(Sha1Hex(bytes));
+            _request = AddHeader(bytes, out var start);
             _start = start;
         }
 
@@ -74,6 +68,33 @@ namespace StackExchange.Redis
 
         internal RespRequest AsLoadRequest()
             => new(_request, RefCountedBuffer.CreateFixed(_request), 0, _request.Length, argCount: LoadArgCount, command: RedisCommand.SCRIPT);
+
+        private static byte[] AddHeader(byte[] bytes, out int start)
+        {
+            ReadOnlySpan<byte> header = "*3\r\n$6\r\nSCRIPT\r\n$4\r\nLOAD\r\n$"u8;
+            Span<byte> utf8len = stackalloc byte[10];
+#if NET
+            var status = bytes.Length.TryFormat(utf8len, out var written);
+#else
+            var status = Utf8Formatter.TryFormat(bytes.Length, utf8len, out var written);
+#endif
+            Debug.Assert(status);
+            var request = new byte[header.Length + written + 2 + bytes.Length + 2];
+            header.CopyTo(request);
+            start = header.Length;
+
+            utf8len.CopyTo(request.AsSpan(start));
+            start += written;
+
+            "\r\n"u8.CopyTo(request.AsSpan(start));
+            start += 2;
+
+            bytes.CopyTo(request.AsSpan(start));
+
+            "\r\n"u8.CopyTo(request.AsSpan(start + bytes.Length));
+
+            return request;
+        }
 
         private static string Sha1Hex(byte[] bytes)
         {

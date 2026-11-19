@@ -4,6 +4,7 @@ StackExchange.Redis.Arrays
 StackExchange.Redis.CachedLuaScript
 StackExchange.Redis.CachedLuaScript.Bytes.get -> System.ReadOnlyMemory<byte>
 StackExchange.Redis.CachedLuaScript.CachedLuaScript(byte[]! bytes) -> void
+StackExchange.Redis.CachedLuaScript.CachedLuaScript(string! str) -> void
 StackExchange.Redis.CachedLuaScript.Hash.get -> byte[]!
 StackExchange.Redis.CachedLuaScript.String.get -> string!
 static StackExchange.Redis.Arrays.CountAsync(this StackExchange.Redis.RespArrays arrays, StackExchange.Redis.RedisKey key, StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<StackExchange.Redis.RedisArrayIndex>
