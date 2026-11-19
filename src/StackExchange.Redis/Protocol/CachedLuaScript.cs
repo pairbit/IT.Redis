@@ -11,14 +11,13 @@ namespace StackExchange.Redis
     internal class CachedLuaScript : IRespPreambleGate
     {
         private const int LoadArgCount = 3;
-        private const int Start = 33;
-
         private readonly string _str;
         private readonly byte[] _request;
         private readonly byte[] _hash;
+        private readonly int _start;
 
         public string String => _str;
-        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(Start);
+        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(_start);
         public int RequestLength => _request.Length;
 
         public byte[] Hash => _hash;
@@ -38,11 +37,17 @@ namespace StackExchange.Redis
             var request = new byte[header.Length + written + 2 + bytes.Length];
             header.CopyTo(request);
 
-            utf8len.CopyTo(request.AsSpan(header.Length));
-            "\r\n"u8.CopyTo(request.AsSpan(header.Length + written));
-            bytes.CopyTo(request.AsSpan(header.Length + written + 2));
+            var start = header.Length;
+            utf8len.CopyTo(request.AsSpan(start));
+            start += written;
+
+            "\r\n"u8.CopyTo(request.AsSpan(start));
+            start += 2;
+
+            bytes.CopyTo(request.AsSpan(start));
 
             _request = request;
+            _start = start;
         }
 
         public bool IsNeeded(IRespPreambleTarget connection)
