@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Buffers.Text;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using RESPite.Buffers;
@@ -8,23 +10,39 @@ namespace StackExchange.Redis
 {
     internal class CachedLuaScript : IRespPreambleGate
     {
+        private const int LoadArgCount = 3;
+        private const int Start = 33;
+
         private readonly string _str;
-        private readonly byte[] _bytes;
+        private readonly byte[] _request;
         private readonly byte[] _hash;
-        private readonly int _argCount;
 
         public string String => _str;
-        public byte[] Bytes => _bytes;
-        public int Length => _bytes.Length;
+        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(Start);
+        public int RequestLength => _request.Length;
 
         public byte[] Hash => _hash;
 
-        public CachedLuaScript(string script)
+        public CachedLuaScript(byte[] bytes)
         {
-            _str = script;
-            _bytes = Encoding.UTF8.GetBytes(script);
-            _hash = Encoding.ASCII.GetBytes(Sha1Hex(_bytes));
-            _argCount = 0; // TODO: calc?
+            _str = Encoding.UTF8.GetString(bytes);
+            _hash = Encoding.ASCII.GetBytes(Sha1Hex(bytes));
+            ReadOnlySpan<byte> header = "*3\r\n$6\r\nSCRIPT\r\n$4\r\nLOAD\r\n"u8;
+            Span<byte> utf8len = stackalloc byte[10];
+#if NET
+            var status = bytes.Length.TryFormat(utf8len, out var written);
+#else
+            var status = Utf8Formatter.TryFormat(bytes.Length, utf8len, out var written);
+#endif
+            Debug.Assert(status);
+            var request = new byte[header.Length + written + 2 + bytes.Length];
+            header.CopyTo(request);
+
+            utf8len.CopyTo(request.AsSpan(header.Length));
+            "\r\n"u8.CopyTo(request.AsSpan(header.Length + written));
+            bytes.CopyTo(request.AsSpan(header.Length + written + 2));
+
+            _request = request;
         }
 
         public bool IsNeeded(IRespPreambleTarget connection)
@@ -33,8 +51,8 @@ namespace StackExchange.Redis
         public void OnEstablished(IRespPreambleTarget connection)
             => connection.Server?.AddScript(_str, _hash);
 
-        internal RespRequest AsRequest()
-            => new(_bytes, RefCountedBuffer.CreateFixed(_bytes), 0, _bytes.Length, argCount: _argCount, command: RedisCommand.SCRIPT);
+        internal RespRequest AsLoadRequest()
+            => new(_request, RefCountedBuffer.CreateFixed(_request), 0, _request.Length, argCount: LoadArgCount, command: RedisCommand.SCRIPT);
 
         private static string Sha1Hex(byte[] bytes)
         {

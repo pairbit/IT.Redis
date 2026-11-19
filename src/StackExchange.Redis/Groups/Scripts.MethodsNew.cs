@@ -41,7 +41,7 @@ public static partial class Scripts
             return context.SendAsync(ref cmd, flags, handler);
         }
 
-        var preamble = script.AsRequest();
+        var preamble = script.AsLoadRequest();
         return Repairable(
             SendPair(context, preamble, (RedisValue)script.Hash, keys, args, flags, readOnly, script, handler),
             context,
