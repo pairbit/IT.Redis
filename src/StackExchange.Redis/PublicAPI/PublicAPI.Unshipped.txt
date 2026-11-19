@@ -1,6 +1,11 @@
 ﻿#nullable enable
 *REMOVED*static StackExchange.Redis.RespReaderExtensions.ReadLease(this in RESPite.Messages.RespReader reader) -> StackExchange.Redis.Lease<byte>?
 StackExchange.Redis.Arrays
+StackExchange.Redis.CachedLuaScript
+StackExchange.Redis.CachedLuaScript.Bytes.get -> System.ReadOnlyMemory<byte>
+StackExchange.Redis.CachedLuaScript.CachedLuaScript(byte[]! bytes) -> void
+StackExchange.Redis.CachedLuaScript.Hash.get -> byte[]!
+StackExchange.Redis.CachedLuaScript.String.get -> string!
 static StackExchange.Redis.Arrays.CountAsync(this StackExchange.Redis.RespArrays arrays, StackExchange.Redis.RedisKey key, StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<StackExchange.Redis.RedisArrayIndex>
 static StackExchange.Redis.Arrays.DeleteAsync(this StackExchange.Redis.RespArrays arrays, StackExchange.Redis.RedisKey key, StackExchange.Redis.RedisArrayIndex index, StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<bool>
 static StackExchange.Redis.Arrays.DeleteAsync(this StackExchange.Redis.RespArrays arrays, StackExchange.Redis.RedisKey key, System.ReadOnlySpan<StackExchange.Redis.RedisArrayIndex> indices, StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<long>
@@ -45,6 +50,8 @@ StackExchange.Redis.Caching.CacheKeyRemovalReason.Expired = 3 -> StackExchange.R
 StackExchange.Redis.Caching.CacheKeyRemovalReason.Evicted = 4 -> StackExchange.Redis.Caching.CacheKeyRemovalReason
 StackExchange.Redis.Caching.CacheKeyRemovalReason.Flushed = 5 -> StackExchange.Redis.Caching.CacheKeyRemovalReason
 StackExchange.Redis.Caching.CacheKeyRemovedHandler
+static StackExchange.Redis.Scripts.EvaluateCachedAsync(this StackExchange.Redis.RespScripts scripts, StackExchange.Redis.CachedLuaScript! script, System.ReadOnlySpan<StackExchange.Redis.RedisKey> keys = default(System.ReadOnlySpan<StackExchange.Redis.RedisKey>), System.ReadOnlySpan<StackExchange.Redis.RedisValue> args = default(System.ReadOnlySpan<StackExchange.Redis.RedisValue>), StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<StackExchange.Redis.RespResult!>
+static StackExchange.Redis.Scripts.EvaluateCachedReadOnlyAsync(this StackExchange.Redis.RespScripts scripts, StackExchange.Redis.CachedLuaScript! script, System.ReadOnlySpan<StackExchange.Redis.RedisKey> keys = default(System.ReadOnlySpan<StackExchange.Redis.RedisKey>), System.ReadOnlySpan<StackExchange.Redis.RedisValue> args = default(System.ReadOnlySpan<StackExchange.Redis.RedisValue>), StackExchange.Redis.CommandFlags flags = StackExchange.Redis.CommandFlags.None, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<StackExchange.Redis.RespResult!>
 virtual StackExchange.Redis.Caching.CacheKeyRemovedHandler.Invoke(System.ReadOnlySpan<byte> key, StackExchange.Redis.Caching.CacheKeyRemovalReason reason) -> void
 StackExchange.Redis.Caching.CacheOptions.Admission.get -> StackExchange.Redis.Caching.CacheAdmission
 StackExchange.Redis.Caching.CacheOptions.Admission.init -> void

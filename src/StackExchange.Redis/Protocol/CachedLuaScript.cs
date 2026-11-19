@@ -8,20 +8,36 @@ using StackExchange.Redis.Protocol;
 
 namespace StackExchange.Redis
 {
-    internal class CachedLuaScript : IRespPreambleGate
+    /// <summary>
+    /// CachedLuaScript.
+    /// </summary>
+    public class CachedLuaScript : IRespPreambleGate
     {
         private const int LoadArgCount = 3;
-        private readonly string _str;
         private readonly byte[] _request;
         private readonly byte[] _hash;
+        private readonly string _str;
         private readonly int _start;
 
+        /// <summary>
+        /// String.
+        /// </summary>
         public string String => _str;
-        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(_start);
-        public int RequestLength => _request.Length;
 
+        /// <summary>
+        /// Bytes.
+        /// </summary>
+        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(_start);
+
+        /// <summary>
+        /// Hash.
+        /// </summary>
         public byte[] Hash => _hash;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CachedLuaScript"/> class.
+        /// </summary>
+        /// <param name="bytes">bytes.</param>
         public CachedLuaScript(byte[] bytes)
         {
             _str = Encoding.UTF8.GetString(bytes);
@@ -50,10 +66,10 @@ namespace StackExchange.Redis
             _start = start;
         }
 
-        public bool IsNeeded(IRespPreambleTarget connection)
+        bool IRespPreambleGate.IsNeeded(IRespPreambleTarget connection)
             => connection.Server is not { } endpoint || !endpoint.IsScriptLoaded(_str);
 
-        public void OnEstablished(IRespPreambleTarget connection)
+        void IRespPreambleGate.OnEstablished(IRespPreambleTarget connection)
             => connection.Server?.AddScript(_str, _hash);
 
         internal RespRequest AsLoadRequest()

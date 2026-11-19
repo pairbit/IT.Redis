@@ -14,6 +14,36 @@ namespace StackExchange.Redis;
 /// </remarks>
 public static partial class Scripts
 {
+    /// <summary>EVALSHA, preceded by SCRIPT LOAD so the hash is certain to resolve.</summary>
+    /// <param name="scripts">The scripting command group.</param>
+    /// <param name="script">The Lua source.</param>
+    /// <param name="keys">The keys the script accesses; these route the command.</param>
+    /// <param name="args">Everything else the script needs.</param>
+    /// <param name="flags">Command flags.</param>
+    /// <param name="cancellationToken">Cancels the request: one not yet written is never sent; one already written still runs on the server, and its reply is discarded.</param>
+    /// <remarks>
+    /// <para>
+    /// The hash is computed here rather than taken from the server's reply, which is what lets the body
+    /// go on the wire <b>once</b>. The existing path cannot do that - it has no hash until
+    /// <c>SCRIPT LOAD</c> answers, so its first call sends <c>SCRIPT LOAD</c> and then <c>EVAL</c>,
+    /// carrying the body twice.
+    /// </para>
+    /// <para>
+    /// <b>Every key the script touches must be passed in <paramref name="keys"/>.</b> That is the
+    /// server's rule rather than ours - it is how a script routes in a cluster - and it is also what
+    /// lets a client-side cache know what to invalidate. A script that reaches a key it did not declare
+    /// is already broken before caching enters the picture.
+    /// </para>
+    /// </remarks>
+    public static ValueTask<RespResult> EvaluateCachedAsync(
+        this RespScripts scripts,
+        CachedLuaScript script,
+        ReadOnlySpan<RedisKey> keys = default,
+        ReadOnlySpan<RedisValue> args = default,
+        CommandFlags flags = CommandFlags.None,
+        CancellationToken cancellationToken = default)
+        => EvaluateCached(scripts, script, keys, args, flags, readOnly: false, RespHandlers.Result);
+
     private static ValueTask<TResult> EvaluateCached<TResult>(
         RespScripts scripts,
         CachedLuaScript script,
@@ -132,7 +162,7 @@ public static partial class Scripts
     /// is - which is the same constraint that puts the loaded-script belief at write time.
     /// </para>
     /// </remarks>
-    internal static ValueTask<RespResult> EvaluateReadOnlyAsync(
+    public static ValueTask<RespResult> EvaluateCachedReadOnlyAsync(
         this RespScripts scripts,
         CachedLuaScript script,
         ReadOnlySpan<RedisKey> keys = default,
