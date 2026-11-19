@@ -41,7 +41,7 @@ namespace StackExchange.Redis
         public CachedLuaScript(byte[] bytes)
         {
             _str = Encoding.UTF8.GetString(bytes);
-            _hash = Encoding.ASCII.GetBytes(Sha1Hex(bytes));
+            _hash = Sha1Hex(bytes);
             _request = AddHeader(bytes, out var start);
             _start = start;
         }
@@ -55,7 +55,7 @@ namespace StackExchange.Redis
             _str = str;
 
             var bytes = Encoding.UTF8.GetBytes(str);
-            _hash = Encoding.ASCII.GetBytes(Sha1Hex(bytes));
+            _hash = Sha1Hex(bytes);
             _request = AddHeader(bytes, out var start);
             _start = start;
         }
@@ -96,7 +96,7 @@ namespace StackExchange.Redis
             return request;
         }
 
-        private static string Sha1Hex(byte[] bytes)
+        private static byte[] Sha1Hex(byte[] bytes)
         {
 #if NET
             Span<byte> digest = stackalloc byte[20];
@@ -109,14 +109,14 @@ namespace StackExchange.Redis
             // is too new to use here. Not hot - and once the rendered SCRIPT LOAD frame is cached, this
             // runs once per script rather than once per call.
             const string Hex = "0123456789abcdef";
-            var chars = new char[40];
+            var chars = new byte[40];
             for (var i = 0; i < 20; i++)
             {
-                chars[i * 2] = Hex[digest[i] >> 4];
-                chars[(i * 2) + 1] = Hex[digest[i] & 0xF];
+                chars[i * 2] = (byte)Hex[digest[i] >> 4];
+                chars[(i * 2) + 1] = (byte)Hex[digest[i] & 0xF];
             }
 
-            return new string(chars);
+            return chars;
         }
     }
 }
