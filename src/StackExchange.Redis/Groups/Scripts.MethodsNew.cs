@@ -74,7 +74,7 @@ public static partial class Scripts
 
         var preamble = script.AsLoadRequest();
         return Repairable(
-            SendPair(context, preamble, (RedisValue)script.Hash, keys, args, flags, readOnly, script, handler),
+            SendPair(context, preamble, (RedisValue)script.Hash, keys, args, flags, readOnly, script, handler, cancellationToken),
             context,
             script,
             keys,
@@ -189,7 +189,8 @@ public static partial class Scripts
         CommandFlags flags,
         bool readOnly,
         IRespPreambleGate gate,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         var command = readOnly
             ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVALSHA_RO, ref flags)
@@ -198,29 +199,11 @@ public static partial class Scripts
         try
         {
             return context.SendWithPreambleAsync(
-                preamble, ref request, flags, handler, gate);
+                preamble, ref request, flags, handler, gate, cancellationToken);
         }
         finally
         {
             request.Dispose();
         }
     }
-
-    /// <summary>The shipped <see cref="RedisResult"/> shape, for <c>IDatabase.ScriptEvaluate</c>.</summary>
-    /// <remarks>
-    /// <b>Permanent, not scaffolding</b>, and internal for the same reason the <c>*Array</c> shims are:
-    /// <see cref="RedisResult"/> materialises the whole reply, which is what the low-allocation
-    /// <see cref="RespResult"/> exists to avoid, so new code must not be able to pick it by accident.
-    /// It is the same parse either way - the handler reuses <c>RedisResult.TryCreate</c> - so the two
-    /// shapes cannot drift.
-    /// </remarks>
-    internal static ValueTask<RedisResult> EvaluateCachedResult(
-        this RespScripts scripts,
-        CachedLuaScript script,
-        ReadOnlySpan<RedisKey> keys,
-        ReadOnlySpan<RedisValue> args,
-        bool readOnly,
-        CommandFlags flags,
-        CancellationToken cancellationToken = default)
-        => EvaluateCached(scripts, script, keys, args, flags, readOnly, RedisResultHandler.Instance, cancellationToken);
 }

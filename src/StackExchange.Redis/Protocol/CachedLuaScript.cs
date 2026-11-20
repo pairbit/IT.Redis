@@ -27,7 +27,7 @@ namespace StackExchange.Redis
         /// <summary>
         /// Bytes.
         /// </summary>
-        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(_start);
+        public ReadOnlyMemory<byte> Bytes => _request.AsMemory(_start, _request.Length - _start - 2);
 
         /// <summary>
         /// Hash.
