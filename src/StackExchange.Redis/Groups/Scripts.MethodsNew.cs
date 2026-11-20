@@ -42,7 +42,7 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args = default,
         CommandFlags flags = CommandFlags.None,
         CancellationToken cancellationToken = default)
-        => EvaluateCached(scripts, script, keys, args, flags, readOnly: false, RespHandlers.Result);
+        => EvaluateCached(scripts, script, keys, args, flags, readOnly: false, RespHandlers.Result, cancellationToken);
 
     private static ValueTask<TResult> EvaluateCached<TResult>(
         RespScripts scripts,
@@ -51,7 +51,8 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args,
         CommandFlags flags,
         bool readOnly,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         if (script is null) throw new ArgumentNullException(nameof(script));
         var context = scripts.Context;
@@ -68,7 +69,7 @@ public static partial class Scripts
                 ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVAL_RO, ref flags)
                 : RedisCommand.EVAL;
             var cmd = context.Render($"{eval}{(RedisValue)script.Bytes}{(RedisValue)keys.Length}{keys}{args}");
-            return context.SendAsync(ref cmd, flags, handler);
+            return context.SendAsync(ref cmd, flags, handler, cancellationToken);
         }
 
         var preamble = script.AsLoadRequest();
@@ -169,7 +170,7 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args = default,
         CommandFlags flags = CommandFlags.None,
         CancellationToken cancellationToken = default)
-        => EvaluateCached(scripts, script, keys, args, flags, readOnly: true, RespHandlers.Result);
+        => EvaluateCached(scripts, script, keys, args, flags, readOnly: true, RespHandlers.Result, cancellationToken);
 
     /// <summary>Render the EVALSHA and send it behind a preamble the registry already owns.</summary>
     /// <remarks>
@@ -216,6 +217,7 @@ public static partial class Scripts
         ReadOnlySpan<RedisKey> keys,
         ReadOnlySpan<RedisValue> args,
         bool readOnly,
-        CommandFlags flags)
-        => EvaluateCached(scripts, script, keys, args, flags, readOnly, RedisResultHandler.Instance);
+        CommandFlags flags,
+        CancellationToken cancellationToken = default)
+        => EvaluateCached(scripts, script, keys, args, flags, readOnly, RedisResultHandler.Instance, cancellationToken);
 }
