@@ -81,7 +81,8 @@ public static partial class Scripts
             args,
             flags,
             readOnly,
-            handler);
+            handler,
+            cancellationToken);
     }
 
     /// <summary>Recover from <c>NOSCRIPT</c> by re-sending the script body.</summary>
@@ -111,13 +112,14 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args,
         CommandFlags flags,
         bool readOnly,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         if (pending.IsCompletedSuccessfully) return pending; // the overwhelmingly common case: no state machine
 
         // the spans cannot cross an await, so the retry's arguments are captured now - only on the path
         // that might need them, which is the one that has already suspended
-        return Awaited(pending, context, script, keys.ToArray(), args.ToArray(), flags, readOnly, handler);
+        return Awaited(pending, context, script, keys.ToArray(), args.ToArray(), flags, readOnly, handler, cancellationToken);
 
         static async ValueTask<TResult> Awaited(
             ValueTask<TResult> pending,
@@ -127,7 +129,8 @@ public static partial class Scripts
             RedisValue[] args,
             CommandFlags flags,
             bool readOnly,
-            IRespHandler<TResult> handler)
+            IRespHandler<TResult> handler,
+            CancellationToken cancellationToken)
         {
             try
             {
@@ -139,7 +142,7 @@ public static partial class Scripts
                     ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVAL_RO, ref flags)
                     : RedisCommand.EVAL;
                 var cmd = context.Render($"{eval}{(RedisValue)script.Bytes}{(RedisValue)keys.Length}{keys}{args}");
-                return await context.SendAsync(ref cmd, flags, handler).ConfigureAwait(false);
+                return await context.SendAsync(ref cmd, flags, handler, cancellationToken).ConfigureAwait(false);
             }
         }
     }
