@@ -54,7 +54,7 @@ public readonly struct GeoCenter
 
     /// <summary>Search around an existing member of the set.</summary>
     /// <param name="member">The member to search around.</param>
-    public static implicit operator GeoCenter(string member) => Member(member);
+    public static implicit operator GeoCenter(string member) => Member(member.AsRedisValue());
 
     /// <summary>Search around a coordinate.</summary>
     /// <param name="position">The position to search around.</param>
