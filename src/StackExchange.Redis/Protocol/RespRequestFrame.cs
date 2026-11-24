@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
-using RESPite;
+using System.Runtime.InteropServices;
 using RESPite.Buffers;
 
 namespace StackExchange.Redis.Protocol
@@ -28,10 +27,25 @@ namespace StackExchange.Redis.Protocol
         internal const int SlotBits = 31;
         internal const ulong SlotMask = (1UL << SlotBits) - 1;
 
-        private byte[]? _buffer;
+        private object? _buffer;
         private readonly int _start;
         private readonly int _length;
         private readonly ulong _keyMarks;
+
+        private readonly byte[]? Array
+        {
+            get
+            {
+                var buffer = _buffer;
+                if (buffer == null) return null;
+                if (buffer is byte[] array) return array;
+                if (buffer is IMemoryOwner<byte> memoryOwner && MemoryMarshal.TryGetArray((ReadOnlyMemory<byte>)memoryOwner.Memory, out var segment))
+                {
+                    return segment.Array!;
+                }
+                throw new InvalidOperationException();
+            }
+        }
 
         internal RespRequestFrame(byte[] buffer, int start, int length, int argCount, int slot, ulong keyMarks, RedisCommand command, int database = -1, bool noReturn = false)
         {
@@ -93,7 +107,7 @@ namespace StackExchange.Redis.Protocol
         private readonly bool _noReturn;
 
         /// <summary>The rendered frame.</summary>
-        public readonly ReadOnlySpan<byte> Span => new(_buffer, _start, _length);
+        public readonly ReadOnlySpan<byte> Span => new(Array, _start, _length);
 
         /// <summary>True when there were more keys than the inline marks can hold, so recovering them needs a walk.</summary>
         public readonly bool KeysNeedScan => (_keyMarks & OverflowFlag) != 0;
@@ -150,7 +164,7 @@ namespace StackExchange.Redis.Protocol
         /// once per frame should cache the result.
         /// </remarks>
         public readonly int TryGetKeys(scoped Span<KeyRange> target)
-            => ResolveKeys(_buffer!, _start, _length, _keyMarks, target);
+            => ResolveKeys(Array!, _start, _length, _keyMarks, target);
 
         /// <summary>
         /// As <see cref="TryGetKeys"/>, for a caller holding the buffer and marks rather than a frame -
@@ -275,7 +289,7 @@ namespace StackExchange.Redis.Protocol
         }
 
         /// <summary>Resolve a <see cref="KeyRange"/> against the underlying buffer.</summary>
-        public readonly ReadOnlySpan<byte> GetKey(in KeyRange range) => new(_buffer, range.Offset, range.Length);
+        public readonly ReadOnlySpan<byte> GetKey(in KeyRange range) => new(Array, range.Offset, range.Length);
 
         /// <summary>
         /// Given the buffer-absolute offset of a fragment's '$', parse the self-describing length and return
@@ -320,10 +334,18 @@ namespace StackExchange.Redis.Protocol
         internal RespRequest Detach(CommandFlags flags, byte[]? prefix)
         {
             var buffer = _buffer ?? throw new ObjectDisposedException(nameof(RespRequestFrame));
+            var arr = Array;
             _buffer = null; // ownership moves to the lease
+
+            RefCountedBuffer? lease = null;
+            if (!_noReturn)
+            {
+                if (buffer is byte[] array) lease = RefCountedBuffer.Adopt(array, array.Length);
+                else if (buffer is IMemoryOwner<byte> memoryOwner) lease = RefCountedBuffer.Adopt(memoryOwner, _length);
+            }
             return new RespRequest(
-                buffer,
-                _noReturn ? null : RefCountedBuffer.Adopt(buffer, buffer.Length),
+                arr!,
+                lease,
                 _start,
                 _length,
                 _keyMarks,
@@ -359,9 +381,10 @@ namespace StackExchange.Redis.Protocol
         /// <param name="prefix">A frame to write ahead of the request, or null; see <see cref="RespRequest.Prefix"/>.</param>
         internal RespRequest AsLookupKey(CommandFlags flags, byte[]? prefix)
         {
-            var buffer = _buffer ?? throw new ObjectDisposedException(nameof(RespRequestFrame));
+            var array = Array ?? throw new ObjectDisposedException(nameof(RespRequestFrame));
+
             return new RespRequest(
-                buffer,
+                array,
                 lease: null,
                 _start,
                 _length,
@@ -379,7 +402,11 @@ namespace StackExchange.Redis.Protocol
         {
             var buffer = _buffer;
             _buffer = null;
-            if (buffer is not null && !_noReturn) ArrayPool<byte>.Shared.Return(buffer);
+            if (!_noReturn)
+            {
+                if (buffer is byte[] arr) ArrayPool<byte>.Shared.Return(arr);
+                else if (buffer is IMemoryOwner<byte> owner) owner.Dispose();
+            }
         }
     }
 

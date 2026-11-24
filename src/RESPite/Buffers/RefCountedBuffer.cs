@@ -103,6 +103,7 @@ internal sealed class RefCountedBuffer : MemoryManager<byte>, IPayloadReservatio
     /// belongs to the reference count.
     /// </remarks>
     public static RefCountedBuffer Adopt(byte[] buffer, int length) => new(buffer, length, noReturn: false, pool: null);
+    internal static RefCountedBuffer Adopt(IMemoryOwner<byte> memoryOwner, int length) => new(memoryOwner, length, noReturn: false, pool: null);
 
     /// <summary>
     /// The number of live references; for assertions and tests.
