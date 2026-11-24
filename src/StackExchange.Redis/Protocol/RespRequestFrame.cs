@@ -33,7 +33,7 @@ namespace StackExchange.Redis.Protocol
         private readonly int _length;
         private readonly ulong _keyMarks;
 
-        internal RespRequestFrame(byte[] buffer, int start, int length, int argCount, int slot, ulong keyMarks, RedisCommand command, int database = -1)
+        internal RespRequestFrame(byte[] buffer, int start, int length, int argCount, int slot, ulong keyMarks, RedisCommand command, int database = -1, bool noReturn = false)
         {
             _buffer = buffer;
             _start = start;
@@ -43,6 +43,7 @@ namespace StackExchange.Redis.Protocol
             Slot = slot;
             Command = command;
             Database = database;
+            _noReturn = noReturn;
         }
 
         /// <summary>Which database this command is for, or <c>-1</c> when it does not belong to one.</summary>
@@ -88,6 +89,8 @@ namespace StackExchange.Redis.Protocol
 
         /// <summary>The combined cluster slot, or <see cref="ServerSelectionStrategy.NoSlot"/>/<see cref="ServerSelectionStrategy.MultipleSlots"/>.</summary>
         public int Slot { get; }
+
+        private readonly bool _noReturn;
 
         /// <summary>The rendered frame.</summary>
         public readonly ReadOnlySpan<byte> Span => new(_buffer, _start, _length);
@@ -320,7 +323,7 @@ namespace StackExchange.Redis.Protocol
             _buffer = null; // ownership moves to the lease
             return new RespRequest(
                 buffer,
-                RefCountedBuffer.Adopt(buffer, buffer.Length),
+                _noReturn ? null : RefCountedBuffer.Adopt(buffer, buffer.Length),
                 _start,
                 _length,
                 _keyMarks,
@@ -376,7 +379,7 @@ namespace StackExchange.Redis.Protocol
         {
             var buffer = _buffer;
             _buffer = null;
-            if (buffer is not null) ArrayPool<byte>.Shared.Return(buffer);
+            if (buffer is not null && !_noReturn) ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
