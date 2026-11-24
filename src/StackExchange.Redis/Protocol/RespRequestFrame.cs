@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using RESPite.Buffers;
 
@@ -49,15 +50,16 @@ namespace StackExchange.Redis.Protocol
 
         internal RespRequestFrame(byte[] buffer, int start, int length, int argCount, int slot, ulong keyMarks, RedisCommand command, int database = -1, bool noReturn = false)
         {
+            Debug.Assert(argCount >= 0);
+
             _buffer = buffer;
             _start = start;
             _length = length;
             _keyMarks = keyMarks;
-            ArgCount = argCount;
+            _argCount = noReturn ? ~argCount : argCount;
             Slot = slot;
             Command = command;
             Database = database;
-            _noReturn = noReturn;
         }
 
         /// <summary>Which database this command is for, or <c>-1</c> when it does not belong to one.</summary>
@@ -80,8 +82,10 @@ namespace StackExchange.Redis.Protocol
         /// </remarks>
         public int Database { get; }
 
+        private readonly int _argCount;
+
         /// <summary>The number of RESP arguments, including the command itself.</summary>
-        public int ArgCount { get; }
+        public readonly int ArgCount => _argCount < 0 ? ~_argCount : _argCount;
 
         /// <summary>
         /// Which command this is, for everything downstream that has to know WHAT is being sent rather than
@@ -104,7 +108,7 @@ namespace StackExchange.Redis.Protocol
         /// <summary>The combined cluster slot, or <see cref="ServerSelectionStrategy.NoSlot"/>/<see cref="ServerSelectionStrategy.MultipleSlots"/>.</summary>
         public int Slot { get; }
 
-        private readonly bool _noReturn;
+        private readonly bool NoReturn => _argCount < 0;
 
         /// <summary>The rendered frame.</summary>
         public readonly ReadOnlySpan<byte> Span => new(Array, _start, _length);
@@ -338,7 +342,7 @@ namespace StackExchange.Redis.Protocol
             _buffer = null; // ownership moves to the lease
 
             RefCountedBuffer? lease = null;
-            if (!_noReturn)
+            if (!NoReturn)
             {
                 if (buffer is byte[] array) lease = RefCountedBuffer.Adopt(array, array.Length);
                 else if (buffer is IMemoryOwner<byte> memoryOwner) lease = RefCountedBuffer.Adopt(memoryOwner, _length);
@@ -402,7 +406,7 @@ namespace StackExchange.Redis.Protocol
         {
             var buffer = _buffer;
             _buffer = null;
-            if (!_noReturn)
+            if (!NoReturn)
             {
                 if (buffer is byte[] arr) ArrayPool<byte>.Shared.Return(arr);
                 else if (buffer is IMemoryOwner<byte> owner) owner.Dispose();
