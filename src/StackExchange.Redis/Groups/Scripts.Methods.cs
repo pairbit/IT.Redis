@@ -159,19 +159,31 @@ public static partial class Scripts
         IRespHandler<TResult> handler,
         CancellationToken cancellationToken)
     {
-        var command = readOnly
+        var evalsha = readOnly
             ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVALSHA_RO, ref flags)
             : RedisCommand.EVALSHA;
-        var request = context.Render($"{command}{hash.AsRedisValue()}{(RedisValue)keys.Length}{keys}{args}");
-        try
-        {
-            return context.SendWithPreambleAsync(
-                ref preamble, ref request, flags, handler, gate, cancellationToken);
-        }
-        finally
-        {
-            request.Dispose();
-        }
+
+        var scriptLength = new RedisValue(script).GetByteCount();
+        Span<byte> scriptLengthUtf8 = stackalloc byte[10];
+        var scriptLengthUtf8Written = Format.FormatInt32(scriptLength, scriptLengthUtf8);
+        var offset = scriptLengthUtf8Written + scriptLength - 45;
+
+        // Allocating additional space for the Eval command.
+        var builder = new RespRequestBuilder(0, 4, context, evalsha, offset: offset > 0 ? offset : 0);
+        builder.AppendFormatted(hash.AsRedisValue());
+        builder.AppendFormatted((RedisValue)keys.Length);
+        builder.AppendFormatted(keys);
+        builder.AppendFormatted(args);
+
+        // We do not return the request to the pool, because we will reuse it in the event that the script is not found.
+        // Upon receiving a request, an external user can return all the leased memory associated with the keys and values.
+        var request = builder.Build(noReturn: true, offset > 0 ? offset : 0, out var requestHeaderLength);
+
+        // a copy of the request, so as not to lose the reference to the buffer.
+        var requestCopy = request;
+        var pending = context.SendWithPreambleAsync(ref preamble, ref request, flags, handler, gate, cancellationToken);
+
+        return Awaited(pending, context, script, requestCopy, offset, requestHeaderLength, flags, handler, cancellationToken);
     }
 
     /// <summary>Render the EVALSHA and send it behind a preamble the registry already owns.</summary>
@@ -217,38 +229,38 @@ public static partial class Scripts
         var pending = context.SendWithPreambleAsync(preamble, ref request, flags, handler, gate, cancellationToken);
 
         return Awaited(pending, context, script, requestCopy, offset, requestHeaderLength, flags, handler, cancellationToken);
+    }
 
-        static async ValueTask<TResult> Awaited(
-            ValueTask<TResult> pending,
-            RespContext context,
-            string script,
-            RespRequestFrame request,
-            int offset,
-            int requestHeaderLength,
-            CommandFlags flags,
-            IRespHandler<TResult> handler,
-            CancellationToken cancellationToken)
+    private static async ValueTask<TResult> Awaited<TResult>(
+        ValueTask<TResult> pending,
+        RespContext context,
+        string script,
+        RespRequestFrame request,
+        int offset,
+        int requestHeaderLength,
+        CommandFlags flags,
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
+    {
+        try
         {
-            try
-            {
-                return await pending.ConfigureAwait(false);
-            }
-            catch (RedisServerException ex) when (ex.Kind == RedisErrorKind.NoScript)
-            {
-                context.ScriptCache?.Forget(script);
-
-                var eval = request.CopyForEval(script, offset, requestHeaderLength);
-
-                pending = context.SendAsync(ref eval, flags, handler, cancellationToken);
-            }
-            finally
-            {
-                // the only place where we return the buffer to the pool, to avoid doing so twice
-                request.EnsureDispose();
-            }
-
             return await pending.ConfigureAwait(false);
         }
+        catch (RedisServerException ex) when (ex.Kind == RedisErrorKind.NoScript)
+        {
+            context.ScriptCache?.Forget(script);
+
+            var eval = request.CopyForEval(script, offset, requestHeaderLength);
+
+            pending = context.SendAsync(ref eval, flags, handler, cancellationToken);
+        }
+        finally
+        {
+            // the only place where we return the buffer to the pool, to avoid doing so twice
+            request.EnsureDispose();
+        }
+
+        return await pending.ConfigureAwait(false);
     }
 
     /// <summary>The SHA1 of a script, lower-case hex, as the server would report it.</summary>
