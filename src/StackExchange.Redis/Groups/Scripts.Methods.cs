@@ -48,7 +48,7 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args = default,
         CommandFlags flags = CommandFlags.None,
         CancellationToken cancellationToken = default)
-        => Evaluate(scripts, script, keys, args, flags, readOnly: false, RespHandlers.Result);
+        => Evaluate(scripts, script, keys, args, flags, readOnly: false, RespHandlers.Result, cancellationToken);
 
     private static ValueTask<TResult> Evaluate<TResult>(
         RespScripts scripts,
@@ -57,7 +57,8 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args,
         CommandFlags flags,
         bool readOnly,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         if (script is null) throw new ArgumentNullException(nameof(script));
 
@@ -93,7 +94,7 @@ public static partial class Scripts
                 ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVAL_RO, ref flags)
                 : RedisCommand.EVAL;
             var cmd = context.Render($"{eval}{script.AsRedisValue()}{(RedisValue)keys.Length}{keys}{args}");
-            return context.SendAsync(ref cmd, flags, handler);
+            return context.SendAsync(ref cmd, flags, handler, cancellationToken);
         }
 
         var registry = context.ScriptCache;
@@ -113,14 +114,15 @@ public static partial class Scripts
                 // NOSCRIPT that nothing repaired. That is how the new core presented, having never been
                 // given a registry at all.
                 return Repairable(
-                    SendPair(context, ref fresh, hash, keys, args, flags, readOnly, new ScriptLoadGate(script, hash), handler),
+                    SendPair(context, ref fresh, hash, keys, args, flags, readOnly, new ScriptLoadGate(script, hash), handler, cancellationToken),
                     context,
                     script,
                     keys,
                     args,
                     flags,
                     readOnly,
-                    handler);
+                    handler,
+                    cancellationToken);
             }
             finally
             {
@@ -130,14 +132,15 @@ public static partial class Scripts
 
         var preamble = registry.GetPreamble(context, script, out var known, out var gate);
         return Repairable(
-            SendPair(context, preamble, known, keys, args, flags, readOnly, gate, handler),
+            SendPair(context, preamble, known, keys, args, flags, readOnly, gate, handler, cancellationToken),
             context,
             script,
             keys,
             args,
             flags,
             readOnly,
-            handler);
+            handler,
+            cancellationToken);
     }
 
     /// <summary>Recover from <c>NOSCRIPT</c> by re-sending the script body.</summary>
@@ -167,13 +170,14 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args,
         CommandFlags flags,
         bool readOnly,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         if (pending.IsCompletedSuccessfully) return pending; // the overwhelmingly common case: no state machine
 
         // the spans cannot cross an await, so the retry's arguments are captured now - only on the path
         // that might need them, which is the one that has already suspended
-        return Awaited(pending, context, script, keys.ToArray(), args.ToArray(), flags, readOnly, handler);
+        return Awaited(pending, context, script, keys.ToArray(), args.ToArray(), flags, readOnly, handler, cancellationToken);
 
         static async ValueTask<TResult> Awaited(
             ValueTask<TResult> pending,
@@ -183,7 +187,8 @@ public static partial class Scripts
             RedisValue[] args,
             CommandFlags flags,
             bool readOnly,
-            IRespHandler<TResult> handler)
+            IRespHandler<TResult> handler,
+            CancellationToken cancellationToken)
         {
             try
             {
@@ -197,7 +202,7 @@ public static partial class Scripts
                     ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVAL_RO, ref flags)
                     : RedisCommand.EVAL;
                 var cmd = context.Render($"{eval}{script.AsRedisValue()}{(RedisValue)keys.Length}{keys}{args}");
-                return await context.SendAsync(ref cmd, flags, handler).ConfigureAwait(false);
+                return await context.SendAsync(ref cmd, flags, handler, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -228,7 +233,7 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args = default,
         CommandFlags flags = CommandFlags.None,
         CancellationToken cancellationToken = default)
-        => Evaluate(scripts, script, keys, args, flags, readOnly: true, RespHandlers.Result);
+        => Evaluate(scripts, script, keys, args, flags, readOnly: true, RespHandlers.Result, cancellationToken);
 
     /// <summary>Render the EVALSHA and send it behind the preamble.</summary>
     private static ValueTask<TResult> SendPair<TResult>(
@@ -240,7 +245,8 @@ public static partial class Scripts
         CommandFlags flags,
         bool readOnly,
         IRespPreambleGate gate,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         var command = readOnly
             ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVALSHA_RO, ref flags)
@@ -249,7 +255,7 @@ public static partial class Scripts
         try
         {
             return context.SendWithPreambleAsync(
-                ref preamble, ref request, flags, handler, gate);
+                ref preamble, ref request, flags, handler, gate, cancellationToken);
         }
         finally
         {
@@ -271,7 +277,8 @@ public static partial class Scripts
         CommandFlags flags,
         bool readOnly,
         IRespPreambleGate gate,
-        IRespHandler<TResult> handler)
+        IRespHandler<TResult> handler,
+        CancellationToken cancellationToken)
     {
         var command = readOnly
             ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVALSHA_RO, ref flags)
@@ -280,7 +287,7 @@ public static partial class Scripts
         try
         {
             return context.SendWithPreambleAsync(
-                preamble, ref request, flags, handler, gate);
+                preamble, ref request, flags, handler, gate, cancellationToken);
         }
         finally
         {
@@ -424,7 +431,7 @@ public static partial class Scripts
         ReadOnlySpan<RedisValue> args,
         bool readOnly,
         CommandFlags flags)
-        => Evaluate(scripts, script, keys, args, flags, readOnly, RedisResultHandler.Instance);
+        => Evaluate(scripts, script, keys, args, flags, readOnly, RedisResultHandler.Instance, default);
 
     /// <inheritdoc cref="EvaluateResult"/>
     internal static ValueTask<RedisResult> EvaluateHashResult(

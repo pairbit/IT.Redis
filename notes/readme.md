@@ -20,5 +20,13 @@ as the record of *why*.
 
 ## Topics
 
+- [`api-surface/`](api-surface/) — the v4 group-surface overload-minimalism audit: which overload
+  stacks folded into operands (`SortedSetRange`, `GeoCenter`, `Expiration` on RESTORE — acted on in
+  #3356), what was considered and deliberately left alone, and what was not examined (`IServer`).
+- [`cluster-slot-stats/`](cluster-slot-stats/) — the implementation plan for CLUSTER SLOT-STATS
+  (Redis 8.2), as implemented on `main` in #3341 and ported to v4 in #3355.
 - [`lag-aware/`](lag-aware/) — Redis Enterprise lag-aware availability checks, and whether they
   belong in the geo-redundant failover health checks.
+- [`v3-v4-behaviour-audit.md`](v3-v4-behaviour-audit.md) — an independent audit of observable
+  behaviour differences between v3 and v4 beyond the intended API changes, for release notes; also
+  records the known gaps and the test-coverage debts (regression pins that died with the old core).
