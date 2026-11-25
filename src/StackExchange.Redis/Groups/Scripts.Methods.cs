@@ -105,24 +105,7 @@ public static partial class Scripts
             var fresh = context.Render($"{RedisCommand.SCRIPT}{RespLiterals.Load}{script.AsRedisValue()}");
             try
             {
-                // a gate per call here, where the registry keeps one per script: without a registry
-                // there is nowhere to keep it, and the skip is worth more than the allocation
-                //
-                // Repairable for the same reason the registry path is, and it was missing here: the gate
-                // consults the ENDPOINT's belief about its script cache, which exists whether or not this
-                // context has a registry - so a SCRIPT FLUSH under a registry-less context produced a
-                // NOSCRIPT that nothing repaired. That is how the new core presented, having never been
-                // given a registry at all.
-                return Repairable(
-                    SendPair(context, ref fresh, hash, keys, args, flags, readOnly, new ScriptLoadGate(script, hash), handler, cancellationToken),
-                    context,
-                    script,
-                    keys,
-                    args,
-                    flags,
-                    readOnly,
-                    handler,
-                    cancellationToken);
+                return SendPair(context, ref fresh, script, hash, keys, args, flags, readOnly, new ScriptLoadGate(script, hash), handler, cancellationToken);
             }
             finally
             {
@@ -131,80 +114,7 @@ public static partial class Scripts
         }
 
         var preamble = registry.GetPreamble(context, script, out var known, out var gate);
-        return Repairable(
-            SendPair(context, preamble, known, keys, args, flags, readOnly, gate, handler, cancellationToken),
-            context,
-            script,
-            keys,
-            args,
-            flags,
-            readOnly,
-            handler,
-            cancellationToken);
-    }
-
-    /// <summary>Recover from <c>NOSCRIPT</c> by re-sending the script body.</summary>
-    /// <remarks>
-    /// <para>
-    /// <b>A belief about a server's script cache can always be wrong.</b> <c>SCRIPT FLUSH</c>, a restart,
-    /// or a failover to a replica that never saw the load all leave the endpoint believing a script is
-    /// present when it is not - and the reply is <c>NOSCRIPT</c>. The shipped surface repairs this in
-    /// <c>ResultProcessor</c> and re-issues with the body; without the same repair the new surface turns
-    /// an ordinary, expected event into an exception the caller has to handle.
-    /// </para>
-    /// <para>
-    /// <b>Only where the source is known.</b> A caller who supplied a hash and not a script cannot be
-    /// repaired - there is nothing to re-send - so <c>EvaluateHash</c> lets the error stand, which is
-    /// what the remarks there already say.
-    /// </para>
-    /// <para>
-    /// The belief is dropped before retrying, so the retry carries its own <c>SCRIPT LOAD</c> rather than
-    /// trusting the record that has just been proved wrong, and the next caller reloads too.
-    /// </para>
-    /// </remarks>
-    private static ValueTask<TResult> Repairable<TResult>(
-        ValueTask<TResult> pending,
-        RespContext context,
-        string script,
-        ReadOnlySpan<RedisKey> keys,
-        ReadOnlySpan<RedisValue> args,
-        CommandFlags flags,
-        bool readOnly,
-        IRespHandler<TResult> handler,
-        CancellationToken cancellationToken)
-    {
-        if (pending.IsCompletedSuccessfully) return pending; // the overwhelmingly common case: no state machine
-
-        // the spans cannot cross an await, so the retry's arguments are captured now - only on the path
-        // that might need them, which is the one that has already suspended
-        return Awaited(pending, context, script, keys.ToArray(), args.ToArray(), flags, readOnly, handler, cancellationToken);
-
-        static async ValueTask<TResult> Awaited(
-            ValueTask<TResult> pending,
-            RespContext context,
-            string script,
-            RedisKey[] keys,
-            RedisValue[] args,
-            CommandFlags flags,
-            bool readOnly,
-            IRespHandler<TResult> handler,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                return await pending.ConfigureAwait(false);
-            }
-            catch (RedisServerException ex) when (ex.Kind == RedisErrorKind.NoScript)
-            {
-                context.ScriptCache?.Forget(script);
-
-                var eval = readOnly
-                    ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVAL_RO, ref flags)
-                    : RedisCommand.EVAL;
-                var cmd = context.Render($"{eval}{script.AsRedisValue()}{(RedisValue)keys.Length}{keys}{args}");
-                return await context.SendAsync(ref cmd, flags, handler, cancellationToken).ConfigureAwait(false);
-            }
-        }
+        return SendPair(context, preamble, script, known, keys, args, flags, readOnly, gate, handler, cancellationToken);
     }
 
     /// <summary>EVALSHA_RO, preceded by SCRIPT LOAD; the read-only form of <c>Evaluate</c>.</summary>
@@ -239,6 +149,7 @@ public static partial class Scripts
     private static ValueTask<TResult> SendPair<TResult>(
         RespContext context,
         ref RespRequestFrame preamble,
+        string script,
         string hash,
         ReadOnlySpan<RedisKey> keys,
         ReadOnlySpan<RedisValue> args,
@@ -271,6 +182,7 @@ public static partial class Scripts
     private static ValueTask<TResult> SendPair<TResult>(
         RespContext context,
         RespRequest preamble,
+        string script,
         string hash,
         ReadOnlySpan<RedisKey> keys,
         ReadOnlySpan<RedisValue> args,
@@ -280,18 +192,62 @@ public static partial class Scripts
         IRespHandler<TResult> handler,
         CancellationToken cancellationToken)
     {
-        var command = readOnly
+        var evalsha = readOnly
             ? ForReadOnlyScript(context.CommandMap, RedisCommand.EVALSHA_RO, ref flags)
             : RedisCommand.EVALSHA;
-        var request = context.Render($"{command}{hash.AsRedisValue()}{(RedisValue)keys.Length}{keys}{args}");
-        try
+
+        var scriptLength = new RedisValue(script).GetByteCount();
+        Span<byte> scriptLengthUtf8 = stackalloc byte[10];
+        var scriptLengthUtf8Written = Format.FormatInt32(scriptLength, scriptLengthUtf8);
+        var offset = scriptLengthUtf8Written + scriptLength - 45;
+
+        // Allocating additional space for the Eval command.
+        var builder = new RespRequestBuilder(0, 4, context, evalsha, offset: offset > 0 ? offset : 0);
+        builder.AppendFormatted(hash.AsRedisValue());
+        builder.AppendFormatted((RedisValue)keys.Length);
+        builder.AppendFormatted(keys);
+        builder.AppendFormatted(args);
+
+        // We do not return the request to the pool, because we will reuse it in the event that the script is not found.
+        // Upon receiving a request, an external user can return all the leased memory associated with the keys and values.
+        var request = builder.Build(noReturn: true, offset > 0 ? offset : 0, out var requestHeaderLength);
+
+        // a copy of the request, so as not to lose the reference to the buffer.
+        var requestCopy = request;
+        var pending = context.SendWithPreambleAsync(preamble, ref request, flags, handler, gate, cancellationToken);
+
+        return Awaited(pending, context, script, requestCopy, offset, requestHeaderLength, flags, handler, cancellationToken);
+
+        static async ValueTask<TResult> Awaited(
+            ValueTask<TResult> pending,
+            RespContext context,
+            string script,
+            RespRequestFrame request,
+            int offset,
+            int requestHeaderLength,
+            CommandFlags flags,
+            IRespHandler<TResult> handler,
+            CancellationToken cancellationToken)
         {
-            return context.SendWithPreambleAsync(
-                preamble, ref request, flags, handler, gate, cancellationToken);
-        }
-        finally
-        {
-            request.Dispose();
+            try
+            {
+                return await pending.ConfigureAwait(false);
+            }
+            catch (RedisServerException ex) when (ex.Kind == RedisErrorKind.NoScript)
+            {
+                context.ScriptCache?.Forget(script);
+
+                var eval = request.CopyForEval(script, offset, requestHeaderLength);
+
+                pending = context.SendAsync(ref eval, flags, handler, cancellationToken);
+            }
+            finally
+            {
+                // the only place where we return the buffer to the pool, to avoid doing so twice
+                request.EnsureDispose();
+            }
+
+            return await pending.ConfigureAwait(false);
         }
     }
 

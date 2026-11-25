@@ -48,6 +48,18 @@ namespace StackExchange.Redis.Protocol
             }
         }
 
+        private RespRequestFrame(object? buffer, int start, int length, int argCount, int slot, ulong keyMarks, RedisCommand command, int database)
+        {
+            _buffer = buffer;
+            _start = start;
+            _length = length;
+            _keyMarks = keyMarks;
+            _argCount = argCount;
+            Slot = slot;
+            Command = command;
+            Database = database;
+        }
+
         internal RespRequestFrame(byte[] buffer, int start, int length, int argCount, int slot, ulong keyMarks, RedisCommand command, int database = -1, bool noReturn = false)
         {
             Debug.Assert(argCount >= 0);
@@ -399,6 +411,47 @@ namespace StackExchange.Redis.Protocol
                 Command,
                 Database,
                 prefix);
+        }
+
+        internal readonly RespRequestFrame CopyForEval(string script, int requestOffset, int requestHeaderLength)
+        {
+            Debug.Assert(NoReturn);
+            Debug.Assert(Command == RedisCommand.EVALSHA_RO || Command == RedisCommand.EVALSHA);
+
+            var array = Array ?? throw new ObjectDisposedException(nameof(RespRequestFrame));
+
+            var start = _start - requestOffset;
+            var length = _length + requestOffset;
+            var span = new Span<byte>(array, start, length);
+
+            new ReadOnlySpan<byte>(array, _start, requestHeaderLength).CopyTo(span);
+            var offset = requestHeaderLength;
+
+            "$4\r\nEVAL\r\n$"u8.CopyTo(span.Slice(offset));
+            offset += 11;
+
+            var scriptValue = new RedisValue(script);
+            var scriptLength = scriptValue.GetByteCount();
+
+            Span<byte> scriptLengthUtf8 = stackalloc byte[10 + 2];
+            var scriptLengthUtf8Written = RespWire.WriteRaw(scriptLengthUtf8, scriptLength);
+
+            scriptLengthUtf8.Slice(0, scriptLengthUtf8Written).CopyTo(span.Slice(offset));
+            offset += scriptLengthUtf8Written;
+
+            scriptValue.CopyTo(span.Slice(offset));
+
+            var command = Command == RedisCommand.EVALSHA_RO ? RedisCommand.EVAL_RO : RedisCommand.EVAL;
+            return new(_buffer, start, length, _argCount, Slot, _keyMarks, command, Database);
+        }
+
+        internal void EnsureDispose()
+        {
+            var buffer = _buffer;
+            _buffer = null;
+
+            if (buffer is byte[] arr) ArrayPool<byte>.Shared.Return(arr);
+            else if (buffer is IMemoryOwner<byte> owner) owner.Dispose();
         }
 
         /// <summary>Return the underlying buffer to the pool; safe to call more than once.</summary>

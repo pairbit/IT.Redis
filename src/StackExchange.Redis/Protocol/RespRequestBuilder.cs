@@ -103,14 +103,14 @@ namespace StackExchange.Redis.Protocol
         /// repeat, being configuration-driven - drops nothing on the floor. See
         /// <c>design/interpolated-resp-writer.md</c> section 6.5.
         /// </remarks>
-        internal RespRequestBuilder(int literalLength, int formattedCount, RespContext context, RedisCommand command)
+        internal RespRequestBuilder(int literalLength, int formattedCount, RespContext context, RedisCommand command, int offset = 0)
         {
             // resolve FIRST: this throws before anything is rented
             var resp = context.ResolveCommand(command);
 
             _context = context;
-            _buffer = ArrayPool<byte>.Shared.Rent(HeaderMax + 64 + resp.Length + literalLength + (formattedCount * 24));
-            _offset = HeaderMax;
+            _buffer = ArrayPool<byte>.Shared.Rent(offset + HeaderMax + 64 + resp.Length + literalLength + (formattedCount * 24));
+            _offset = offset + HeaderMax;
             _slot = ServerSelectionStrategy.NoSlot;
 
             resp.CopyTo(_buffer.AsSpan(_offset));
@@ -896,7 +896,9 @@ namespace StackExchange.Redis.Protocol
         /// Back-fill the <c>*N</c> header into the reserved prologue, right-aligned, and take ownership of
         /// the buffer away from the handler.
         /// </summary>
-        public RespRequestFrame Complete()
+        public RespRequestFrame Complete() => Build(noReturn: false, 0, out _);
+
+        internal RespRequestFrame Build(bool noReturn, int start, out int headerLength)
         {
             if (!_hasCommand) Throw(ref this);
 
@@ -911,11 +913,11 @@ namespace StackExchange.Redis.Protocol
 
             Span<byte> header = stackalloc byte[HeaderMax];
             header[0] = (byte)'*';
-            var headerLength = RespWire.WriteRaw(header, _args, offset: 1);
-            var start = HeaderMax - headerLength;
+            headerLength = RespWire.WriteRaw(header, _args, offset: 1);
+            start += HeaderMax - headerLength;
             header.Slice(0, headerLength).CopyTo(_buffer.AsSpan(start));
 
-            var frame = new RespRequestFrame(_buffer, start, _offset - start, _args, _slot, PackKeyMarks(), _command, _context.Database);
+            var frame = new RespRequestFrame(_buffer, start, _offset - start, _args, _slot, PackKeyMarks(), _command, _context.Database, noReturn);
             _buffer = null!; // ownership transferred to the frame
             return frame;
 
