@@ -168,6 +168,10 @@ public static partial class Scripts
         var scriptLengthUtf8Written = Format.FormatInt32(scriptLength, scriptLengthUtf8);
         var offset = scriptLengthUtf8Written + scriptLength - 45;
 
+        // The EVALSHA_RO command is 10 bytes long and takes up 2 characters, unlike the EVAL_RO command, which takes up 1 character.
+        if (evalsha == RedisCommand.EVALSHA_RO)
+            offset--;
+
         // Allocating additional space for the Eval command.
         var builder = new RespRequestBuilder(0, 4, context, evalsha, offset: offset > 0 ? offset : 0);
         builder.AppendFormatted(hash.AsRedisValue());
