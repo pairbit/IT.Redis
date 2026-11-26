@@ -427,8 +427,19 @@ namespace StackExchange.Redis.Protocol
             new ReadOnlySpan<byte>(array, _start, requestHeaderLength).CopyTo(span);
             var offset = requestHeaderLength;
 
-            "$4\r\nEVAL\r\n$"u8.CopyTo(span.Slice(offset));
-            offset += 11;
+            RedisCommand command;
+            if (Command == RedisCommand.EVALSHA_RO)
+            {
+                command = RedisCommand.EVAL_RO;
+                "$7\r\nEVAL_RO\r\n$"u8.CopyTo(span.Slice(offset));
+                offset += 14;
+            }
+            else
+            {
+                command = RedisCommand.EVAL;
+                "$4\r\nEVAL\r\n$"u8.CopyTo(span.Slice(offset));
+                offset += 11;
+            }
 
             var scriptValue = new RedisValue(script);
             var scriptLength = scriptValue.GetByteCount();
@@ -441,7 +452,6 @@ namespace StackExchange.Redis.Protocol
 
             scriptValue.CopyTo(span.Slice(offset));
 
-            var command = Command == RedisCommand.EVALSHA_RO ? RedisCommand.EVAL_RO : RedisCommand.EVAL;
             return new(_buffer, start, length, _argCount, Slot, _keyMarks, command, Database);
         }
 
